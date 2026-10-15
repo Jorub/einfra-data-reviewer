@@ -1,0 +1,17 @@
+# Local credentials, data and reports must never be committed
+.Renviron
+.Renviron.*
+.env
+.env.*
+.einfra-key
+*.pem
+*.key
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+data/
+reports/
+private/
+*.log
+.DS_Store
