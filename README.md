@@ -1,11 +1,11 @@
 # eINFRA data reviewer for RStudio
 
-A small, read-only CSV validation and remote reasoning prototype. No local LLM or GPU is needed. Uses the eINFRA OpenAI-compatible API at `https://llm.ai.e-infra.cz/v1`.
+A small, read-only CSV/NetCDF validation and remote reasoning prototype. No local LLM or GPU is needed. Uses the eINFRA OpenAI-compatible API at `https://llm.ai.e-infra.cz/v1`.
 
 ## Start in RStudio / JupyterHub
 
 1. Clone or upload this repository into persistent storage and open the `.Rproj`.
-2. Run `source("setup.R")`. It installs only missing packages (`curl`, `jsonlite`, `getPass`) and verifies they are available; installed packages are not updated.
+2. Run `source("setup.R")`. It installs only missing packages (`curl`, `jsonlite`, `getPass`, `ncdf4`) and verifies they are available; installed packages are not updated.
 3. Open `start_here.R` and run the synthetic offline example section by section.
 4. Run `set_api_key()` interactively: the hidden prompt keeps the key in process memory only. The key is never saved by this project. Do not paste it into code, chat, notebooks, or console commands.
 5. `list_models()` checks server network access and authentication. Choose an available model; aliases can change.
@@ -14,7 +14,7 @@ A small, read-only CSV validation and remote reasoning prototype. No local LLM o
 
 ## Scope and limits
 
-Current checks: required columns, nonempty table, duplicate column names, finite numeric values, caller-defined ranges and unique keys. Ranges are explicit scientific contracts, not model guesses. Dates, units, NetCDF metadata, checksums, processing comparisons and code review are future extensions; this prototype does not check them. Only CSV inputs should be used. It does not execute RDS files or model-generated commands and never modifies inputs. PASS is not proof of correct science. Model output is advice and cannot override failed numerical checks. No automated remediation or agent loop is provided.
+Current checks: required columns, nonempty table, duplicate column names, finite numeric values, caller-defined ranges and unique keys. Ranges are explicit scientific contracts, not model guesses. NetCDF validation is described below. Download-manifest checksums, processing comparisons, and code review are future extensions. It does not execute RDS files or model-generated commands and never modifies inputs. PASS is not proof of correct science. Model output is advice and cannot override failed numerical checks. No automated remediation or agent loop is provided.
 
 The API models cannot inspect server files, browse or run tools through this client. Current availability and container outbound network access must be tested in your own environment. There has been no live-key test from your server.
 
@@ -28,7 +28,7 @@ API calls are bounded to 16 kB summary text and a chosen completion budget. Usag
 
 ## Tests
 
-`Rscript tests/test_offline.R`
+`Rscript tests/test_offline.R` and `Rscript tests/test_netcdf.R`
 
 Uses synthetic data and a clearly fake credential sentinel; no network or real secrets.
 
@@ -39,3 +39,17 @@ Prepared with Codex assistance, adapting the design of the user's local eINFRA o
 ## User-supplied paths
 
 Select a CSV with `file.choose()` or pass its path to `check_csv(path = ...)`. Use `check_files(paths = ...)` for multiple CSVs sharing a validation contract. Supply `report_dir` explicitly when calling the API reviewer. No machine-specific data directory is embedded in the program. Input paths remain local and are omitted from built-in review summaries. Keep reports outside the public Git checkout when possible. The relative `source("R/reviewer.R")` identifies project code, not a data location.
+
+## NetCDF temperature baseline
+
+Open `netcdf_example.R` after pulling the latest repository. Select the input file at runtime; no server path is embedded in code. The example contract is monthly Celsius temperature, 0.25-degree global grid, January 2000 through December 2019 (240 records). Adjust expectations only deliberately. Set `variable` explicitly if more than one data variable matches the coordinate dimensions. This initial NetCDF checker is specialized for rectilinear temperature grids.
+
+Checks cover degree coordinate units, regular spacing, monotonicity, conventional longitude/latitude ranges, global grid extent, Celsius units, time count/order and exact monthly coverage. Time decoding supports seconds/minutes/hours/days since a date in standard/Gregorian/proleptic Gregorian calendars; unsupported calendars, timezone offsets, or origins are reported NOT_CHECKED. Monthly sampling does not prove monthly-mean semantics. A reference mask is required to verify global land coverage; it is not inferred from the missing fraction. No physical temperature threshold is invented.
+
+All months are scanned one slice at a time using ncdf4's missing-value and packing decoding. Local diagnostics retain each slice's missing/nonfinite counts and unweighted spatial quantiles. The model preview includes selected variable metadata, expected contract, diagnostic counts, overall extremes and at most eight representative slice summaries. These are not area-weighted climate means and are not a reference-product comparison. Paths, global history attributes, raw grids, and full command output are excluded. Metadata may still be sensitive: inspect the preview.
+
+When installed, `ncdump -k` independently queries file format and `cdo -s ntime` independently counts time records. Commands read the input and have no output-file arguments. Full tool output is retained only in the local `local_tool_results` attribute, never automatically sent to the API. Unavailable/failed tools produce NOT_CHECKED rather than implying the input is invalid. The external commands have no enforced timeout in this prototype. Both tools still require validation in the user's server environment.
+
+`review_evidence`, `local_slice_statistics`, and `local_tool_results` are attributes of the returned checks. Only `review_evidence` enters `prepare_review()`. Optionally save the full checks object with `saveRDS()` in private report storage. No model call is needed to run deterministic checks.
+
+NetCDF tests create small synthetic fixtures in temporary storage: clean baseline, wrong units, missing/duplicate months, wrong resolution, unsupported calendar, and all-missing slice. They verify input checksums are unchanged and outgoing payloads exclude input paths. The real server file has not been accessed or tested by the developer.
