@@ -53,3 +53,11 @@ When installed, `ncdump -k` independently queries file format and `cdo -s ntime`
 `review_evidence`, `local_slice_statistics`, and `local_tool_results` are attributes of the returned checks. Only `review_evidence` enters `prepare_review()`. Optionally save the full checks object with `saveRDS()` in private report storage. No model call is needed to run deterministic checks.
 
 NetCDF tests create small synthetic fixtures in temporary storage: clean baseline, wrong units, missing/duplicate months, wrong resolution, unsupported calendar, and all-missing slice. They verify input checksums are unchanged and outgoing payloads exclude input paths. The real server file has not been accessed or tested by the developer.
+
+## Processing history and full headers
+
+NetCDF checks now query `ncdump -h` when available. The complete header stays in `attr(checks, "local_tool_results")$ncdump_header$output`, which may contain private metadata and must be kept local. The model receives the global `history` attribute, read directly through ncdf4, in `review_evidence$processing_history`. This is the same attribute shown near the bottom of `ncdump -h`; raw full headers are not submitted.
+
+Common credential assignments, bearer tokens, URLs, identities and paths are redacted before the history enters the preview. Redaction is best-effort and cannot establish that arbitrary metadata is free of secrets. Inspect the outgoing preview and opt out with `include_history = FALSE` if needed. History is capped at 6,000 characters after redaction; truncation is explicitly reported. Operation names and numerical arguments such as CDO conversion constants remain visible for diagnostic review. History describes recorded steps, not independent proof of correctness.
+
+After upgrading, rerun `source("R/reviewer.R")`, `source("R/netcdf.R")`, and `check_netcdf(...)` to rebuild `checks`; an existing object does not acquire history automatically. Recreate the preview before any API submission. This changes the review from blind numerical diagnosis to history-informed diagnosis; keep earlier reports separate when comparing the two.

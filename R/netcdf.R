@@ -1,8 +1,26 @@
+# Reduce disclosure from free-text history; review the preview before submission.
+sanitize_history <- function(text, max_chars = 6000L) {
+  text <- paste(as.character(text), collapse = "\n")
+  # Redact credential-like assignments and authorization headers before paths.
+  text <- gsub("(?i)(authorization[ :]+bearer[ ]+)[^\\s\"']+", "\\1[REDACTED]", text, perl = TRUE)
+  text <- gsub("(?i)((?:api[_-]?key|access[_-]?token|password|passwd|secret|token)[ ]*[=:][ ]*)(?:\"[^\"]*\"|'[^']*'|[^\\s;]+)",
+               "\\1[REDACTED]", text, perl = TRUE)
+  text <- gsub("(?i)\\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+", "[REDACTED]", text, perl = TRUE)
+  text <- gsub("https?://[^\\s\"']+", "[URL REDACTED]", text, perl = TRUE)
+  text <- gsub("[^\\s\"']+@[^\\s\"']+", "[IDENTITY REDACTED]", text, perl = TRUE)
+  # Absolute, home-relative, relative-with-slash and Windows paths. Keep CDO operators.
+  text <- gsub("(?:[A-Za-z]:[\\\\/]|~/|/|\\.\\.?/)[^\\s\"']+", "[PATH REDACTED]", text, perl = TRUE)
+  list(text = substr(text, 1L, max_chars), truncated = nchar(text) > max_chars,
+       redacted = TRUE,
+       note = "Common paths/credentials/URLs redacted automatically; not a guarantee. Inspect preview. History records operations, not proof that processing was correct.")
+}
+
 # Read-only NetCDF diagnostics. Caller supplies paths and scientific expectations.
 check_netcdf <- function(path, variable = NULL, expected_units = "degC",
                          resolution = 0.25, start_month = "2000-01",
                          end_month = "2019-12", global_grid = TRUE,
-                         scan_values = TRUE, use_system_tools = TRUE) {
+                         scan_values = TRUE, use_system_tools = TRUE,
+                         include_history = TRUE) {
   if (!requireNamespace("ncdf4", quietly = TRUE)) stop("Run setup.R to install ncdf4.")
   if (!file.exists(path)) stop("NetCDF input does not exist.")
   if (!identical(expected_units, "degC")) stop("This initial checker implements Celsius contracts only.")
@@ -41,6 +59,13 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     result <- do.call(rbind, rows)
     attr(result, "review_evidence") <- evidence
     result
+  }
+  if (include_history) {
+    history <- getatt(0, "history")
+    evidence$processing_history <- if (is.null(history))
+      list(source = "NetCDF global history attribute (also shown by ncdump -h)", available = FALSE) else
+      c(list(source = "NetCDF global history attribute (also shown by ncdump -h)", available = TRUE),
+        sanitize_history(history))
   }
   if (anyNA(dims)) return(finish())
   candidates <- names(nc$var)[vapply(nc$var, function(v)
@@ -163,6 +188,9 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     add("ncdump_readability",format_result$status,"Independent format query; unavailable tools or failures are not a data verdict")
     # Return raw tool output only as a local attribute, never in API evidence.
     tool_results$ncdump <- format_result
+    header_result <- run("ncdump",c("-h",shQuote(path)))
+    add("ncdump_header",header_result$status,"Full header retained locally; only redacted global history is submitted")
+    tool_results$ncdump_header <- header_result
     cdo_result <- run("cdo",c("-s","ntime",shQuote(path)))
     count <- suppressWarnings(as.numeric(trimws(cdo_result$output)))
     if(identical(cdo_result$status,"PASS") && length(count)==1 && is.finite(count))

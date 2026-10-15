@@ -33,3 +33,21 @@ x <- run(calendar="360_day");stopifnot(x$status[x$check=="monthly_time_axis"]=="
 x <- run(all_missing=TRUE);stopifnot(x$status[x$check=="nonempty_time_slices"]=="FAIL")
 stopifnot(nchar(prepare_review(x),type="bytes")<16000)
 cat("NetCDF tests passed: valid baseline, wrong units, missing/duplicate months, wrong resolution, unsupported calendar, missing slice, unchanged input, and payload path exclusion.\n")
+# History reaches the preview, but common paths/credential patterns do not.
+f <- tempfile(fileext=".nc");make_fixture(f)
+n <- nc_open(f,write=TRUE)
+ncatt_put(n,0,"history",paste(
+ "cdo -addc,273.15 /mnt/private/input.nc /mnt/private/output.nc",
+ "api_key=FAKE_HISTORY_CREDENTIAL authorization: Bearer FAKE_BEARER_CREDENTIAL",
+ "https://example.org/private?token=FAKE_QUERY_CREDENTIAL",sep="\n"))
+nc_close(n)
+x <- check_netcdf(f,resolution=90,start_month="2000-01",end_month="2001-12",use_system_tools=FALSE)
+p <- as.character(prepare_review(x))
+stopifnot(grepl("-addc,273.15",p,fixed=TRUE))
+for(secret in c("/mnt/private", "FAKE_HISTORY_CREDENTIAL", "FAKE_BEARER_CREDENTIAL", "FAKE_QUERY_CREDENTIAL"))
+  stopifnot(!grepl(secret,p,fixed=TRUE))
+y <- check_netcdf(f,resolution=90,start_month="2000-01",end_month="2001-12",use_system_tools=FALSE,include_history=FALSE)
+stopifnot(is.null(attr(y,"review_evidence")$processing_history))
+stopifnot(sanitize_history(paste(rep("x",7000),collapse=""))$truncated)
+unlink(f)
+cat("History inclusion, opt-out, redaction and truncation tests passed.\n")

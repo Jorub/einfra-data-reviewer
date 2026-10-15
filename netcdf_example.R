@@ -8,7 +8,8 @@ data_path <- file.choose()
 checks <- check_netcdf(
   path = data_path, expected_units = "degC", resolution = 0.25,
   start_month = "2000-01", end_month = "2019-12",
-  global_grid = TRUE, scan_values = TRUE, use_system_tools = TRUE
+  global_grid = TRUE, scan_values = TRUE, use_system_tools = TRUE,
+  include_history = TRUE
 )
 print(checks)
 # If data_variable fails due to ambiguity, rerun with variable = "actual_name".
