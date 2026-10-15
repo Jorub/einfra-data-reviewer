@@ -5,7 +5,7 @@ A small, read-only CSV validation and remote reasoning prototype. No local LLM o
 ## Start in RStudio / JupyterHub
 
 1. Clone or upload this repository into persistent storage and open the `.Rproj`.
-2. Install `curl`, `jsonlite`, and `getPass` from CRAN.
+2. Run `source("setup.R")`. It installs only missing packages (`curl`, `jsonlite`, `getPass`) and verifies they are available; installed packages are not updated.
 3. Open `start_here.R` and run the synthetic offline example section by section.
 4. Run `set_api_key()` interactively: the hidden prompt keeps the key in process memory only. The key is never saved by this project. Do not paste it into code, chat, notebooks, or console commands.
 5. `list_models()` checks server network access and authentication. Choose an available model; aliases can change.

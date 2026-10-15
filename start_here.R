@@ -1,5 +1,6 @@
 # Open this project in RStudio; run one section at a time.
-# Install once: install.packages(c("curl", "jsonlite", "getPass"))
+# Install missing dependencies once (no API key required):
+# source("setup.R")
 source("R/reviewer.R")
 
 # Offline pilot: synthetic example only, no API call.
