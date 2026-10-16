@@ -17,3 +17,14 @@ stopifnot(inherits(try(review_checks(x,"fake","stale",send=TRUE),silent=TRUE),"t
 clear_api_key(); stopifnot(!exists("key",envir=.einfra,inherits=FALSE))
 unlink(f)
 cat("Offline validation, payload isolation, and approval tests passed. No network calls made.\n")
+# Prompt must invite diagnosis and preserve failed/unperformed checks without
+# transmitting full PASS descriptions or unrelated attributes.
+a <- x
+attr(a,"local_tool_results") <- list(secret="SYNTHETIC_LOCAL_ONLY")
+v2 <- jsonlite::fromJSON(prepare_review(a))
+stopifnot(v2$prompt_version=="scientific-triage-v2")
+stopifnot(v2$passed_checks$count==sum(a$status=="PASS"))
+stopifnot(nrow(v2$attention_checks)==sum(a$status!="PASS"))
+stopifnot(!grepl("SYNTHETIC_LOCAL_ONLY",prepare_review(a),fixed=TRUE))
+stopifnot(grepl("Independently assess physical plausibility",v2$task,fixed=TRUE))
+cat("Scientific-triage prompt and compact evidence tests passed.\n")

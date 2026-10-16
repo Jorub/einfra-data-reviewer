@@ -61,3 +61,9 @@ NetCDF checks now query `ncdump -h` when available. The complete header stays in
 Common credential assignments, bearer tokens, URLs, identities and paths are redacted before the history enters the preview. Redaction is best-effort and cannot establish that arbitrary metadata is free of secrets. Inspect the outgoing preview and opt out with `include_history = FALSE` if needed. History is capped at 6,000 characters after redaction; truncation is explicitly reported. Operation names and numerical arguments such as CDO conversion constants remain visible for diagnostic review. History describes recorded steps, not independent proof of correctness.
 
 After upgrading, rerun `source("R/reviewer.R")`, `source("R/netcdf.R")`, and `check_netcdf(...)` to rebuild `checks`; an existing object does not acquire history automatically. Recreate the preview before any API submission. This changes the review from blind numerical diagnosis to history-informed diagnosis; keep earlier reports separate when comparing the two.
+
+## Scientific review prompt and batch-audit planning
+
+The `scientific-triage-v2` prompt requests independent plausibility assessment, prioritised actionable findings, explicit confidence levels and discriminating next checks. It distinguishes a wrong operation recorded in history from proof that it fully explains the current file. Routine PASS entries are compacted to their check names; failures, coverage gaps and scientific evidence remain. Existing previews must be rebuilt after reloading `R/reviewer.R`.
+
+A server-wide weekend runner is **not ready yet**. The current checker remains a specialised monthly Celsius pilot. See `docs/batch-review-design.md` for its audited limitations and the proposed variable contracts, persistent per-file checkpoints, local flagged-filename lists, API budgets and incomplete-review handling. Do not use the pilot's default scientific expectations as a contract for unrelated variables.
