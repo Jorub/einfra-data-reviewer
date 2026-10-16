@@ -1,56 +1,111 @@
 source("R/reviewer.R")
 source("R/netcdf.R")
 library(ncdf4)
-make_fixture <- function(path, units = "degC", missing_month = FALSE, duplicate_month = FALSE,
-                         spacing = 90, calendar = "standard", all_missing = FALSE) {
-  dates <- seq(as.Date("2000-01-15"),by = "month",length.out = 24)
-  if(missing_month) dates <- dates[-5]
-  if(duplicate_month) dates[5] <- dates[4]
-  lon <- ncdim_def("lon","degrees_east",seq(-135,by = spacing,length.out = 4))
-  lat <- ncdim_def("lat","degrees_north",c(-45,45))
-  time <- ncdim_def("time","days since 2000-01-01",as.numeric(dates-as.Date("2000-01-01")),calendar = calendar)
-  def <- ncvar_def("t2m",units,list(lon,lat,time),missval = -9999,prec = "float")
-  n <- nc_create(path,def)
-  values <- array(rep(c(NA,2,5,10,15,20,25,30),length(dates)),c(4,2,length(dates)))
-  if(all_missing) values[,,5] <- NA
-  ncvar_put(n,def,values);nc_close(n)
+if (!requireNamespace("CFtime", quietly = TRUE)) stop("Install CFtime before running calendar-aware tests.")
+make_fixture <- function(path, units = "degC", variable = "t2m", months = 1:24,
+                         spacing = 0.25, calendar = "standard", all_missing = FALSE,
+                         history = "Synthetic source; monthly mean computed from daily mean inputs") {
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
+  lon <- ncdim_def("lon", "degrees_east", seq(1, by = spacing, length.out = 4))
+  lat <- ncdim_def("lat", "degrees_north", c(40, 40 + spacing))
+  # Fixture dates generated in calendar space; no invalid POSIX dates for 360_day.
+  cal_days <- CFtime::as_timestamp(CFtime::CFtime("days since 2000-01-01", calendar, 0:740), format = "date")
+  offsets <- which(substr(cal_days, 9, 10) == "01")[months] - 1
+  td <- ncdim_def("time", "days since 2000-01-01", offsets, calendar = calendar)
+  def <- ncvar_def(variable, units, list(lon, lat, td), missval = -9999, prec = "float")
+  n <- nc_create(path, def)
+  values <- array(rep(c(NA, 2, 5, 10, 15, 20, 25, 30), length(months)), c(4, 2, length(months)))
+  if (units == "K") values <- values + 273.15
+  if (all_missing) values[, , 5] <- NA
+  ncvar_put(n, def, values)
+  if (!is.null(history)) ncatt_put(n, 0, "history", history)
+  nc_close(n)
 }
-run <- function(...) {
- d <- tempfile(); dir.create(d); on.exit(unlink(d,recursive = TRUE))
- f <- file.path(d,"synthetic_t2m_degC_land_200001_200112_090_monthly.nc");make_fixture(f,...)
- before <- tools::md5sum(f)
- x <- check_netcdf(f,resolution = 90,start_month = "2000-01",end_month = "2001-12",use_system_tools = FALSE)
- stopifnot(identical(before,tools::md5sum(f)))
- stopifnot(!grepl(f,prepare_review(x),fixed = TRUE))
- x
+run_fixture <- function(name = "synthetic_t2m_degC_region_200001_200112_025_monthly.nc", ...) {
+  d <- tempfile(); dir.create(d); on.exit(unlink(d, recursive = TRUE))
+  f <- file.path(d, name); make_fixture(f, ...)
+  before <- tools::md5sum(f)
+  x <- check_netcdf(f, use_system_tools = FALSE)
+  stopifnot(identical(before, tools::md5sum(f)), !grepl(d, prepare_review(x), fixed = TRUE))
+  x
 }
-x <- run(); stopifnot(!any(x$status=="FAIL"))
-stopifnot(attr(x,"review_evidence")$value_scan$slices==24)
-x <- run(units = "K");stopifnot(x$status[x$check=="temperature_units"]=="FAIL")
-x <- run(missing_month = TRUE);stopifnot(x$status[x$check=="monthly_time_axis"]=="FAIL",
-  x$status[x$check=="complete_years"]=="WARN",
-  grepl("2000-05",attr(x,"review_evidence")$observed$time$incomplete_years$missing_months[1],fixed = TRUE))
-x <- run(duplicate_month = TRUE);stopifnot(x$status[x$check=="monthly_time_axis"]=="FAIL")
-x <- run(spacing = 80);stopifnot(x$status[x$check=="lon_resolution"]=="FAIL")
-x <- run(calendar = "360_day");stopifnot(x$status[x$check=="monthly_time_axis"]=="NOT_CHECKED")
-x <- run(all_missing = TRUE);stopifnot(x$status[x$check=="nonempty_time_slices"]=="FAIL")
-stopifnot(nchar(prepare_review(x),type = "bytes")<16000)
-cat("NetCDF tests passed: valid baseline, wrong units, missing/duplicate months, wrong resolution, unsupported calendar, missing slice, unchanged input, and payload path exclusion.\n")
-# History reaches the preview, but common paths/credential patterns do not.
-f <- tempfile(fileext = ".nc");make_fixture(f)
-n <- nc_open(f,write = TRUE)
-ncatt_put(n,0,"history",paste(
- "cdo -addc,273.15 /mnt/private/input.nc /mnt/private/output.nc",
+x <- run_fixture(); stopifnot(!any(x$status %in% c("FAIL", "WARN")))
+stopifnot(attr(x, "review_evidence")$value_scan$slices == 24)
+x <- run_fixture(units = "K"); stopifnot(x$status[x$check == "filename_units"] == "FAIL")
+x <- run_fixture(name = "synthetic_t2m_K_region_200001_200112_025_monthly.nc", units = "K")
+stopifnot(!any(x$status %in% c("FAIL", "WARN")))
+x <- run_fixture(months = (1:24)[-5]); stopifnot(x$status[x$check == "time_coverage"] == "FAIL")
+x <- run_fixture(months = c(1:4, 4, 6:24)); stopifnot(x$status[x$check == "time_coverage"] == "FAIL")
+x <- run_fixture(name = "synthetic_tmin_degC_region_200001_200108_025_monthly.nc", variable = "tmin", months = 1:20)
+stopifnot(!any(x$status %in% c("FAIL", "WARN")), !"complete_years" %in% x$check)
+x <- run_fixture(name = "synthetic_tmin_degC_region_200001_200108_025_monthly.nc", variable = "tmin", months = 1:20, history = NULL)
+stopifnot(x$status[x$check == "provenance_evidence"] == "FAIL", x$status[x$check == "extrema_aggregation_provenance"] == "FAIL")
+x <- run_fixture(spacing = .5); stopifnot(x$status[x$check == "lon_resolution"] == "FAIL")
+x <- run_fixture(calendar = "360_day"); stopifnot(x$status[x$check == "time_coverage"] == "PASS")
+x <- run_fixture(all_missing = TRUE); stopifnot(x$status[x$check == "nonempty_time_slices"] == "FAIL")
+# A regional fixture cannot pass global extent; global files also require ocean data.
+x <- run_fixture(name = "synthetic_t2m_degC_global_200001_200112_025_monthly.nc")
+stopifnot(x$status[x$check == "global_data_coverage"] == "FAIL", x$status[x$check == "lon_global_extent"] == "FAIL")
+x <- run_fixture(name = "synthetic_t2m_degC_land_200001_200112_025_monthly.nc")
+stopifnot(x$status[x$check == "land_data_coverage"] == "WARN")
+x <- run_fixture(name = "synthetic_pr_mm_region_200001_200112_025_monthly.nc", variable = "pr", units = "mm")
+stopifnot(attr(x, "review_evidence")$family$family == "precip", !any(x$status %in% c("FAIL", "WARN")))
+# History retention/redaction and opt-out.
+d <- tempfile(); dir.create(d); f <- file.path(d, "synthetic_t2m_degC_region_200001_200112_025_monthly.nc")
+make_fixture(f, history = paste("cdo -addc,273.15 /mnt/private/input.nc /mnt/private/output.nc",
  "api_key=FAKE_HISTORY_CREDENTIAL authorization: Bearer FAKE_BEARER_CREDENTIAL",
- "https://example.org/private?token=FAKE_QUERY_CREDENTIAL",sep = "\n"))
-nc_close(n)
-x <- check_netcdf(f,resolution = 90,start_month = "2000-01",end_month = "2001-12",use_system_tools = FALSE)
-p <- as.character(prepare_review(x))
-stopifnot(grepl("-addc,273.15",p,fixed = TRUE))
-for(secret in c("/mnt/private", "FAKE_HISTORY_CREDENTIAL", "FAKE_BEARER_CREDENTIAL", "FAKE_QUERY_CREDENTIAL"))
-  stopifnot(!grepl(secret,p,fixed = TRUE))
-y <- check_netcdf(f,resolution = 90,start_month = "2000-01",end_month = "2001-12",use_system_tools = FALSE,include_history = FALSE)
-stopifnot(is.null(attr(y,"review_evidence")$processing_history))
-stopifnot(sanitize_history(paste(rep("x",7000),collapse = ""))$truncated)
-unlink(f)
-cat("History inclusion, opt-out, redaction and truncation tests passed.\n")
+ "https://example.org/private?token=FAKE_QUERY_CREDENTIAL", sep = "\n"))
+x <- check_netcdf(f, use_system_tools = FALSE); p <- as.character(prepare_review(x))
+stopifnot(grepl("-addc,273.15", p, fixed = TRUE))
+for (secret in c("/mnt/private", "FAKE_HISTORY_CREDENTIAL", "FAKE_BEARER_CREDENTIAL", "FAKE_QUERY_CREDENTIAL"))
+  stopifnot(!grepl(secret, p, fixed = TRUE))
+y <- check_netcdf(f, use_system_tools = FALSE, include_history = FALSE)
+stopifnot(!attr(y, "review_evidence")$processing_history$available)
+stopifnot(sanitize_history(paste(rep("x", 7000), collapse = ""))$truncated)
+unlink(d, recursive = TRUE)
+# Hourly/daily/annual coverage: no comparison between different products.
+fn <- function(freq, start = "200002", end = "200002") parse_netcdf_filename(
+  paste0("synthetic_pr_mm_region_", start, "_", end, "_025_", freq, ".nc"))
+tm <- function(vals, cal, freq, start = "200002", end = "200002", bounds = NULL)
+  netcdf_time_checks(vals, "hours since 2000-02-01", cal, fn(freq, start, end), bounds)
+z <- tm(seq(0, by = 24, length.out = 29), "standard", "daily")
+stopifnot(z$checks$status[z$checks$check == "time_coverage"] == "PASS")
+z <- tm(seq(0, by = 24, length.out = 28), "noleap", "daily")
+stopifnot(z$checks$status[z$checks$check == "time_coverage"] == "PASS")
+z <- tm(seq(0, by = 24, length.out = 30), "360_day", "daily")
+stopifnot(z$checks$status[z$checks$check == "time_coverage"] == "PASS")
+z <- tm(0:(29*24-1), "standard", "hourly")
+stopifnot(z$checks$status[z$checks$check == "time_coverage"] == "PASS")
+z <- tm((0:(29*24-1))[-12], "standard", "hourly")
+stopifnot(z$checks$status[z$checks$check == "time_coverage"] == "FAIL")
+z <- tm(c(0, 366*24), "standard", "yearly", "200001", "200108")
+stopifnot(z$checks$status[z$checks$check == "annual_filename_completeness"] == "FAIL")
+stopifnot(all(vapply(c("evap", "other", "precip", "runoff", "snow", "soilmoisture", "temperature"),
+  function(f) netcdf_family("example.nc", "unknown", f)$family == f, logical(1))))
+cat("Filename-derived multi-family NetCDF tests passed: Celsius/Kelvin, precipitation, monthly August, provenance, missing/duplicate records, CF calendars, hourly gaps, annual completeness, coverage policy, redaction and unchanged inputs.\n")
+# Valid global-domain fixtures may be pole-to-pole or limited to 60S–60N.
+d <- tempfile(); dir.create(d)
+make_domain <- function(scale, latitude, missing = FALSE) {
+  f <- file.path(d, paste0("synthetic_t2m_K_", scale, "_200001_200001_090_monthly.nc"))
+  lon <- ncdim_def("lon", "degrees_east", c(-135, -45, 45, 135))
+  lat <- ncdim_def("lat", "degrees_north", latitude)
+  time <- ncdim_def("time", "days since 2000-01-01", 0)
+  v <- ncvar_def("t2m", "K", list(lon, lat, time), -9999)
+  n <- nc_create(f, v)
+  vals <- array(280, c(4, length(latitude), 1))
+  if (missing) vals[1:5] <- NA
+  ncvar_put(n, v, vals)
+  ncatt_put(n, 0, "source", "Synthetic documented test product")
+  ncatt_put(n, "t2m", "cell_methods", "time: mean")
+  nc_close(n)
+  check_netcdf(f, use_system_tools = FALSE, resolution_codes = c("090" = 90))
+}
+z <- make_domain("global", c(-45, 45))
+stopifnot(!any(z$status %in% c("FAIL", "WARN")))
+z <- make_domain("global", c(-60, 30))
+stopifnot(!any(z$status %in% c("FAIL", "WARN")))
+z <- make_domain("land", c(-45, 45), TRUE)
+stopifnot(z$status[z$check == "land_data_coverage"] == "PASS")
+stopifnot(!"lat_global_extent" %in% z$check)
+unlink(d, recursive = TRUE)
+cat("Global full/limited latitude and approximate land-fraction coverage tests passed.\n")

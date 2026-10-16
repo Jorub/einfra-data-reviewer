@@ -62,3 +62,8 @@ z <- http_error_summary(400,b)
 stopifnot(grepl("reasoning_effort",z,fixed = TRUE),!grepl("FAKE_PRIVATE_SENTINEL",z,fixed = TRUE))
 stopifnot(!grepl("FAKE_PRIVATE_SENTINEL",http_error_summary(400,charToRaw("FAKE_PRIVATE_SENTINEL")),fixed = TRUE))
 cat("Optional reasoning field and whitelisted HTTP diagnostic tests passed.\n")
+
+# A model PASS cannot certify a file when essential variable/grid/time checks are unsupported.
+clean <- checks; clean$status <- "PASS"
+attr(clean, "review_evidence")$blocking_gaps <- "time_coverage"
+stopifnot(review_summary(clean, "COMPLETED", list(verdict = "PASS", reason = "No issue", report_markdown = "Test"))$result == "INCOMPLETE")

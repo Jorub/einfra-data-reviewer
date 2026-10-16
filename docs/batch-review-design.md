@@ -1,6 +1,6 @@
 # From the temperature pilot to a server audit
 
-Status: design and code audit, not an implemented weekend batch runner.
+Status: historical audit and design notes. The filename-derived common checker and seven family review policies are now implemented; see README.md for current behavior. The sequential pilot exists, but unattended directory-wide checkpoint resume is not implemented. The limitations below describe the original temperature-only pilot unless stated otherwise.
 
 ## Current limitations established by code inspection
 

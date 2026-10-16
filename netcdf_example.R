@@ -7,12 +7,9 @@ source("R/netcdf.R")
 # Set paths locally. Do not commit private paths or credentials to GitHub.
 data_path <- ""
 report_dir <- ""
-variable <- NULL                    # explicit NetCDF variable name if ambiguous
-expected_units <- "degC"
-resolution <- 0.25
-start_month <- "2000-01"
-end_month <- "2019-12"
-global_grid <- TRUE
+variable <- NULL                    # optional actual variable selector if ambiguous
+family <- NULL                      # infer from folder; optional family selector
+provenance_notes <- ""              # optional supplied documentation, never invented
 scan_values <- TRUE
 use_system_tools <- TRUE
 include_history <- TRUE
@@ -30,9 +27,8 @@ if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE))
 
 # Read-only checks ===========================================================
 checks <- check_netcdf(
-  path = data_path, variable = variable, expected_units = expected_units,
-  resolution = resolution, start_month = start_month, end_month = end_month,
-  global_grid = global_grid, scan_values = scan_values,
+  path = data_path, variable = variable, family = family,
+  provenance_notes = provenance_notes, scan_values = scan_values,
   use_system_tools = use_system_tools, include_history = include_history
 )
 print(checks)

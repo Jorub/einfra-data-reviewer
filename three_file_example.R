@@ -11,15 +11,12 @@ max_tokens <- 8192L
 reasoning_effort <- NULL
 clear_key_after <- TRUE               # clear in-memory key when the batch finishes
 send_to_api <- FALSE                  # explicit approval for the three selected payloads
-# This pilot supports monthly Celsius temperature on regular lon/lat grids only.
-# Enter each file's own expected dates, resolution and spatial extent below.
+# Filename supplies units, dates, resolution, coverage and frequency.
+# Folder supplies family/stage hints. Optional family selects the matching policy.
 file_specs <- list(
-  list(path = "",expected_units = "degC",resolution = 0.25,start_month = "2000-01",
-       end_month = "2019-12",global_grid = TRUE,include_history = TRUE),
-  list(path = "",expected_units = "degC",resolution = 0.25,start_month = "2000-01",
-       end_month = "2019-12",global_grid = TRUE,include_history = TRUE),
-  list(path = "",expected_units = "degC",resolution = 0.25,start_month = "2000-01",
-       end_month = "2019-12",global_grid = TRUE,include_history = TRUE)
+  list(path = "", family = NULL, provenance_notes = ""),
+  list(path = "", family = NULL, provenance_notes = ""),
+  list(path = "", family = NULL, provenance_notes = "")
 )
 
 # Authentication once per session ============================================

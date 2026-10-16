@@ -1,6 +1,6 @@
 # Run once from the project root in RStudio: source("setup.R")
 # Install only missing runtime packages; leave installed versions unchanged.
-required_packages <- c("curl", "jsonlite", "getPass", "ncdf4")
+required_packages <- c("curl", "jsonlite", "getPass", "ncdf4", "CFtime")
 missing_packages <- required_packages[!vapply(
   required_packages, requireNamespace, logical(1), quietly = TRUE
 )]
@@ -22,4 +22,4 @@ if (length(unavailable)) {
   stop("Setup incomplete; packages unavailable: ", paste(unavailable, collapse = ", "),
        ". Check installation messages, network access, and library write permissions.")
 }
-message("Setup complete: curl, jsonlite, getPass, and ncdf4 are available. No API key needed.")
+message("Setup complete: curl, jsonlite, getPass, ncdf4, and CFtime are available. No API key needed.")
