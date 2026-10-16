@@ -95,7 +95,9 @@ prepare_review <- function(checks) {
     "When history records a mathematically wrong conversion, identify the wrong operation directly. Distinguish that demonstrated error in the recorded operation from whether the history fully explains the current values.",
     "Use simple numerical sanity checks to assess proposed offsets or scale errors; label counterfactual calculations as diagnostics, not approved corrections.",
     "Propose likely causes when supported; do not invent missing processing steps, claim proof from filenames, or hide behind uncertainty about plainly implausible values.",
-    "Required provenance: identify the source and establish the meaning of temporal aggregation using supplied metadata, history or notes. If that is missing or ambiguous, report a provenance FAIL with the exact unresolved question. A missing history attribute alone is not failure when equivalent evidence is supplied elsewhere.",
+    "Project conventions: raw files have already been preprocessed to common units and a 0.25-degree grid; raw does not mean untouched downloads. Processed files generally contain time/spatial subsets. All project grids must be 0.25 degrees.",
+    "A source may already be monthly, daily or annual. Do not invent a local temporal aggregation requirement or call the absence of an aggregation command an error. Establish the final values temporal meaning from source documentation and/or preprocessing evidence. A metadata-only unit edit does not prove a conversion was needed or omitted.",
+    "Required provenance: identify the source and establish the meaning of values at the filename frequency using supplied metadata, history or notes. If that is missing or ambiguous, report a provenance FAIL with the exact unresolved question. A missing history attribute alone is not failure when equivalent evidence is supplied elsewhere.",
     "Monthly data may validly end in August or another declared month: do not flag an incomplete boundary year for monthly, daily or hourly products. Annual partial-year products require a flag. Missing records inside the declared interval are always a problem.",
     "Limited latitude coverage such as 60S–60N and inclusion/exclusion of Antarctica are both allowed. Describe latitude extent, but do not fail a file solely for those domain differences. Global data coverage refers to land and ocean within the represented domain.",
     "Do not FAIL solely because an independent land-mask comparison was not performed; distinguish an unperformed optional check from missing essential source/aggregation provenance.",
@@ -110,7 +112,7 @@ prepare_review <- function(checks) {
     "Coverage gaps: only material checks still missing. If no issue is identified, say what evidence was actually reviewed. No executable commands."
   )
   # Only explicit evidence is transmitted; raw local tool outputs stay local.
-  jsonlite::toJSON(list(prompt_version = "scientific-triage-v4-families", task = task,
+  jsonlite::toJSON(list(prompt_version = "scientific-triage-v5-project-conventions", task = task,
     passed_checks = list(count = length(passed), names = passed),
     attention_checks = attention, context = attr(checks, "review_evidence")),
     dataframe = "rows", auto_unbox = TRUE, null = "null", pretty = TRUE)
@@ -172,7 +174,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
     input_bytes = input_bytes,max_input_bytes = max_input_bytes,finish_reason = NULL,usage = NULL,
     complete = FALSE,llm_status = "NOT_COMPLETED",deterministic_failures = sum(checks$status=="FAIL"),
-    deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v4-families",
+    deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v5-project-conventions",
     time_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
   save_status <- function(status,parsed = NULL) {
     metadata$llm_status <- status

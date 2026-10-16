@@ -32,13 +32,13 @@ file_specs <- list(
 )
 ```
 
-Eight nonempty fields and valid YYYYMM endpoints are required. Malformed dates are flagged, not silently repaired. Kelvin and Celsius are both supported; the filename's units are checked against the NetCDF attribute. Known Celsius/Kelvin spelling variants are normalized, but arbitrary physical unit conversions or variable-name aliases are not guessed. A variable can be selected explicitly if needed. The supported resolution-code mapping initially contains `025 = 0.25` degrees. Extend the explicit `resolution_codes` mapping when other conventions are established; unknown codes yield an incomplete essential check.
+Eight nonempty fields and valid YYYYMM endpoints are required. Malformed dates are flagged, not silently repaired. Kelvin and Celsius are both supported; the filename's units are checked against the NetCDF attribute. Known Celsius/Kelvin spelling variants are normalized, but arbitrary physical unit conversions or variable-name aliases are not guessed. A variable can be selected explicitly if needed. All project files must have a 0.25-degree grid and the established `025` filename code. Both the filename and actual coordinate spacing are checked against this project requirement; neither is allowed to redefine it.
 
 A matching NetCDF variable is selected by filename where possible. Multiple candidates are not silently reduced to the first. Regular rectilinear longitude/latitude/time dimensions are supported. Nonsingleton extra dimensions, unsupported grids or time encodings remain visible as blocking coverage gaps, not clean passes. The numerical scan reads all time slices one at a time with ncdf4 fill-value and packing decoding; quantiles are unweighted spatial summaries, not area-weighted climate means. This is still a potentially large I/O job for daily/hourly files.
 
 ## Variable-family review policies
 
-`R/netcdf_families.R` supplies separate review requirements for `evap`, `other`, `precip`, `runoff`, `snow`, `soilmoisture` and `temperature`. Family and raw/processed stage are inferred from folder names when available; an optional `family` selector is allowed. These hints do not override filename/content contradictions. Regional scale names do not impose global extent.
+`R/netcdf_families.R` supplies separate review requirements for `evap`, `other`, `precip`, `runoff`, `snow`, `soilmoisture` and `temperature`. Family and raw/processed stage are inferred from folder names when available. Here `raw` means already preprocessed/harmonised to common units and the 0.25-degree grid, not untouched downloaded data. `processed` generally means additional time/spatial subsets; an optional `family` selector is allowed. These hints do not override filename/content contradictions. Regional scale names do not impose global extent.
 
 The family functions guide scientific LLM review; they are not a comprehensive deterministic validator for every environmental quantity:
 
@@ -67,7 +67,7 @@ These are grid-cell fractions, not area-weighted land fractions. Missingness doe
 
 ## Provenance and processing history
 
-Unclear essential source/aggregation provenance is a review failure, even when numerical checks pass. For monthly Tmin, for example, distinguish mean daily minima from the lowest temperature of the month. Missing a history attribute alone is not an automatic failure if equivalent metadata or explicit documentation resolves provenance. Optional `provenance_notes` may supply actual documentation; never invent it.
+Unclear essential source/aggregation provenance is a review failure, even when numerical checks pass. For monthly Tmin, for example, distinguish mean daily minima from the lowest temperature of the month. The original source may already have the named monthly/daily/annual frequency; a local aggregation step is not mandatory. Final values must have the temporal interpretation and units represented by the filename. Missing an aggregation command or history attribute alone is not an automatic failure if equivalent metadata or source documentation resolves provenance. A metadata-only units edit does not prove the numeric values required conversion. Optional `provenance_notes` may supply actual documentation; never invent it.
 
 Selected source attributes, cell_methods and redacted global history enter the approved model preview. `ncdump -k`, `ncdump -h` and `cdo -s ntime` are queried when available, with 120-second command timeouts. Full command output stays in the local diagnostic object. History documents recorded operations, not proof that those operations fully explain the current file. History is capped at 6,000 characters with truncation reported.
 

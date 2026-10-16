@@ -22,7 +22,7 @@ cat("Offline validation, payload isolation, and approval tests passed. No networ
 a <- x
 attr(a,"local_tool_results") <- list(secret = "SYNTHETIC_LOCAL_ONLY")
 v2 <- jsonlite::fromJSON(prepare_review(a))
-stopifnot(v2$prompt_version=="scientific-triage-v4-families")
+stopifnot(v2$prompt_version=="scientific-triage-v5-project-conventions")
 stopifnot(v2$passed_checks$count==sum(a$status=="PASS"))
 stopifnot(nrow(v2$attention_checks)==sum(a$status!="PASS"))
 stopifnot(!grepl("SYNTHETIC_LOCAL_ONLY",prepare_review(a),fixed = TRUE))

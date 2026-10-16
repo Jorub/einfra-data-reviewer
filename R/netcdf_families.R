@@ -1,4 +1,4 @@
-# Family-specific review requirements. No guessed physical bounds or conversions.
+# Family-specific review requirements. Sources may already have the named frequency. No guessed physical bounds or conversions.
 family_review <- function(name, requirements) list(family = name, requirements = requirements)
 check_temperature <- function() family_review("temperature", c(
   "Check physical plausibility in the declared Kelvin or Celsius units and inspect the conversion direction.",

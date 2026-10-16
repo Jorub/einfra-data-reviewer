@@ -86,26 +86,36 @@ cat("Filename-derived multi-family NetCDF tests passed: Celsius/Kelvin, precipit
 # Valid global-domain fixtures may be pole-to-pole or limited to 60S–60N.
 d <- tempfile(); dir.create(d)
 make_domain <- function(scale, latitude, missing = FALSE) {
-  f <- file.path(d, paste0("synthetic_t2m_K_", scale, "_200001_200001_090_monthly.nc"))
-  lon <- ncdim_def("lon", "degrees_east", c(-135, -45, 45, 135))
+  f <- file.path(d, paste0("synthetic_t2m_K_", scale, "_200001_200001_025_monthly.nc"))
+  lon <- ncdim_def("lon", "degrees_east", seq(-179.875, 179.875, by = .25))
   lat <- ncdim_def("lat", "degrees_north", latitude)
   time <- ncdim_def("time", "days since 2000-01-01", 0)
   v <- ncvar_def("t2m", "K", list(lon, lat, time), -9999)
   n <- nc_create(f, v)
-  vals <- array(280, c(4, length(latitude), 1))
-  if (missing) vals[1:5] <- NA
+  vals <- array(280, c(length(lon$vals), length(latitude), 1))
+  if (missing) vals[seq_len(floor(length(vals) * 2 / 3))] <- NA
   ncvar_put(n, v, vals)
   ncatt_put(n, 0, "source", "Synthetic documented test product")
   ncatt_put(n, "t2m", "cell_methods", "time: mean")
   nc_close(n)
-  check_netcdf(f, use_system_tools = FALSE, resolution_codes = c("090" = 90))
+  check_netcdf(f, use_system_tools = FALSE)
 }
-z <- make_domain("global", c(-45, 45))
+z <- make_domain("global", seq(-89.875, 89.875, by = .25))
 stopifnot(!any(z$status %in% c("FAIL", "WARN")))
-z <- make_domain("global", c(-60, 30))
+z <- make_domain("global", seq(-59.875, 59.875, by = .25))
 stopifnot(!any(z$status %in% c("FAIL", "WARN")))
-z <- make_domain("land", c(-45, 45), TRUE)
+z <- make_domain("land", seq(-89.875, 89.875, by = .25), TRUE)
 stopifnot(z$status[z$check == "land_data_coverage"] == "PASS")
 stopifnot(!"lat_global_extent" %in% z$check)
 unlink(d, recursive = TRUE)
 cat("Global full/limited latitude and approximate land-fraction coverage tests passed.\n")
+
+# Wrong filename grid code is a naming failure even when coordinates are 0.25.
+x <- run_fixture(name = "synthetic_t2m_degC_region_200001_200112_050_monthly.nc")
+stopifnot(x$status[x$check == "resolution_code"] == "FAIL", x$status[x$check == "lon_resolution"] == "PASS")
+# Supplied native-frequency documentation is evidence; no local aggregation command is required.
+x <- run_fixture(history = "Native monthly source; original values already Celsius; only spatial remapping was performed")
+p <- prepare_review(x)
+stopifnot(!any(x$status == "FAIL"), grepl("raw does not mean untouched downloads", p, fixed = TRUE),
+          grepl("Do not invent a local temporal aggregation requirement", p, fixed = TRUE))
+cat("Project raw-stage, native-frequency source and fixed-grid convention tests passed.\n")

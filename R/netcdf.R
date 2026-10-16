@@ -41,7 +41,6 @@ sanitize_history <- function(text, max_chars = 6000L) {
 # All scientific expectations come from the filename; family and notes add context.
 check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes = "",
                          scan_values = TRUE, use_system_tools = TRUE, include_history = TRUE,
-                         resolution_codes = c("025" = 0.25),
                          land_missing_range = c(0.50, 0.85)) {
   if (!requireNamespace("ncdf4", quietly = TRUE)) stop("Run setup.R to install ncdf4.")
   if (!file.exists(path)) stop("NetCDF input does not exist.")
@@ -54,9 +53,12 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v1", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v2", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
-    provenance = "Unclear source or aggregation semantics is a failure requiring human review",
+    provenance = "Unclear source or temporal meaning is a failure requiring human review; native-frequency source data need not have a local aggregation step",
+    project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
+    temporal_values = "Values must have the quantity, units and temporal interpretation represented by the filename frequency; metadata/history or source documentation must explain that interpretation",
+    project_grid_degrees = 0.25,
     temporal = "Monthly/daily/hourly boundary years may end as declared; annual products require complete years"))
   finish <- function() {
     x <- do.call(rbind, rows)
@@ -72,11 +74,12 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   evidence$family <- profile
   pieces <- strsplit(gsub("\\\\", "/", dirname(path)), "/", fixed = TRUE)[[1]]
   evidence$stage <- if ("processed" %in% pieces) "processed" else if ("raw" %in% pieces) "raw" else "unspecified"
-  resolution <- unname(resolution_codes[f$spatial_resolution])
-  resolution_ok <- length(resolution) == 1 && is.finite(resolution) && resolution > 0
-  evidence$contract <- c(f, list(resolution_degrees = if (resolution_ok) resolution else NULL))
-  add("resolution_code", if (resolution_ok) "PASS" else "NOT_CHECKED",
-    if (resolution_ok) paste("Filename resolution:", resolution, "degrees") else "Unknown spatial resolution code; extend explicit resolution_codes mapping")
+  # Project-wide invariant, independent of filename claims.
+  resolution <- 0.25
+  resolution_ok <- TRUE
+  evidence$contract <- c(f, list(resolution_degrees = resolution))
+  add("resolution_code", identical(f$spatial_resolution, "025"),
+    "All project grids are 0.25 degrees; filename must use the established 025 code")
   n <- tryCatch(ncdf4::nc_open(path), error = function(e) stop("Cannot open NetCDF input."))
   on.exit(ncdf4::nc_close(n))
   att <- function(v, a, default = NULL) {
@@ -150,7 +153,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     monotone <- finite && (all(diff(x) > 0) || all(diff(x) < 0))
     add(paste0(axis, "_coordinates"), monotone, "Finite, unique, strictly monotonic coordinates")
     spacing <- if (resolution_ok) monotone && all(abs(abs(diff(x)) - resolution) < max(1e-6, resolution * 1e-5)) else NA
-    add(paste0(axis, "_resolution"), if (!resolution_ok) "NOT_CHECKED" else if (spacing) "PASS" else "FAIL", "Spacing compared with filename resolution")
+    add(paste0(axis, "_resolution"), if (!resolution_ok) "NOT_CHECKED" else if (spacing) "PASS" else "FAIL", "Spacing compared with project-wide 0.25-degree requirement and filename 025 claim")
     degree_units <- tolower(d$units) %in% if (axis == "lon") c("degrees_east", "degree_east") else c("degrees_north", "degree_north")
     add(paste0(axis, "_units"), degree_units, paste("Coordinate units:", d$units))
     if (finite) {
