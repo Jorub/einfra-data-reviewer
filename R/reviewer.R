@@ -118,7 +118,10 @@ review_summary <- function(checks, llm_status, parsed = NULL) {
   data.frame(filename=f,result=status,reason=paste(reasons,collapse="; "),stringsAsFactors=FALSE)
 }
 review_checks <- function(checks, model, approved_payload, send = FALSE,
-                          report_dir, max_tokens = 8192L) {
+                          report_dir, max_tokens = 8192L, reasoning_effort = "medium") {
+  if(length(reasoning_effort)!=1 || is.na(reasoning_effort) ||
+     !reasoning_effort %in% c("low","medium","high"))
+    stop("reasoning_effort must be low, medium or high.")
   payload <- as.character(prepare_review(checks))
   if (!isTRUE(send)) stop("Preview prepare_review(checks), then explicitly set send = TRUE.")
   if (!identical(as.character(approved_payload), payload)) stop("Checks changed since preview; preview again.")
@@ -134,7 +137,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   saveRDS(checks,file.path(run,"local-diagnostics.rds"))
   # Create a conservative checkpoint before contacting the API.
   write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names=FALSE)
-  metadata <- list(requested_model=model,returned_model=NULL,finish_reason=NULL,usage=NULL,
+  metadata <- list(requested_model=model,returned_model=NULL,reasoning_effort=reasoning_effort,finish_reason=NULL,usage=NULL,
     complete=FALSE,llm_status="NOT_COMPLETED",deterministic_failures=sum(checks$status=="FAIL"),
     deterministic_warnings=sum(checks$status=="WARN"),prompt_version="scientific-triage-v3-json",
     time_utc=format(Sys.time(),tz="UTC",usetz=TRUE))
@@ -151,7 +154,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   }
   save_status("NOT_COMPLETED")
   result <- tryCatch(api_request("/chat/completions",list(model=model,
-    messages=list(list(role="user",content=payload)),max_tokens=max_tokens,stream=FALSE)),
+    messages=list(list(role="user",content=payload)),max_tokens=max_tokens,reasoning_effort=reasoning_effort,stream=FALSE)),
     error=function(e) {
       save_status("API_ERROR")
       writeLines("API review failed; deterministic results retained.",file.path(run,"INCOMPLETE.txt"))

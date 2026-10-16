@@ -91,3 +91,7 @@ Deterministic FAIL/WARN cannot be overridden by model PASS. A failed/truncated/i
 After pulling, reload both modules and rerun the monthly example to rebuild filename-aware diagnostics and preview. Reloading `R/reviewer.R` clears the in-memory key, so enter it again with `set_api_key()` before submitting. Capture `run <- review_checks(...)` and open `file.path(run, "summary.csv")` and `file.path(run, "review.md")`.
 
 Tests: `Rscript tests/test_review_output.R` uses mock API responses (no network) to verify JSON validation, CSV quoting, model/deterministic precedence, successful detailed reports and incomplete/error reporting. Synthetic NetCDF tests verify malformed names, time gaps, filename evidence and path exclusion; they do not establish how a real model will diagnose the server file.
+
+## Reasoning effort
+
+`review_checks()` now defaults to `reasoning_effort = "medium"` and sends that field in the Chat Completions request. Choose `"low"`, `"medium"`, or `"high"`; the requested setting is recorded in `metadata.json`. Whether and how the selected gateway model honors this field must be confirmed in a live run. A medium setting does not guarantee completion within the token budget. It cannot alter an already submitted request. Reloading the reviewer module resets the in-memory key; re-enter it before retrying. Existing `checks` can be reused without another data scan, but rebuild and inspect the preview after reloading.

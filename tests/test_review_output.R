@@ -13,14 +13,17 @@ p <- prepare_review(checks)
 stopifnot(grepl('synthetic_t2m_degC_land_200001_201912_025_monthly.nc',p,fixed=TRUE))
 # Mock API responses only: test software behavior, not model competence.
 output <- tempfile();dir.create(output)
-api_request <- function(...) list(model="mock",choices=list(list(finish_reason="stop",message=list(content=
+api_request <- function(route,payload) {
+ stopifnot(payload$reasoning_effort=="medium")
+ list(model="mock",choices=list(list(finish_reason="stop",message=list(content=
   jsonlite::toJSON(list(verdict="FAIL",reason="Wrong sign in the recorded Celsius conversion; implausible temperatures.",
     report_markdown="## Findings\nRecorded addc conversion has the wrong sign. Verify source before repair."),auto_unbox=TRUE)))),
   usage=list(completion_tokens=100))
+}
 run <- review_checks(checks,"mock",p,send=TRUE,report_dir=output)
 r <- read.csv(file.path(run,"summary.csv"))
 stopifnot(identical(names(r),c("filename","result","reason")),r$result=="FAIL",file.exists(file.path(run,"review.md")))
-m <- jsonlite::read_json(file.path(run,"metadata.json"));stopifnot(m$complete,m$llm_status=="COMPLETED")
+m <- jsonlite::read_json(file.path(run,"metadata.json"));stopifnot(m$complete,m$llm_status=="COMPLETED",m$reasoning_effort=="medium")
 # A model PASS cannot override deterministic failures.
 parsed <- list(verdict="PASS",reason="No issues identified",report_markdown="Test report")
 stopifnot(review_summary(checks,"COMPLETED",parsed)$result=="FAIL")
