@@ -107,3 +107,19 @@ The HTTP diagnostic now indicates when a structured provider error mentions `rea
 `netcdf_example.R`, `inventory_sim.R` and `start_here.R` now place all user settings immediately below their source statements. Edit paths and options there, then run the script; there are no file pickers, directory prompts or automatic viewer popups. Public copies leave paths blank. Do not commit private local settings. This supersedes the earlier file-picker/readline instructions.
 
 Remote reviews default to `send_to_api = FALSE`. Inspect the printed/saved preview before explicitly enabling API submission; the selected setting constitutes approval of that run's payload. The hidden API-key prompt is the only interactive input, and the key stays in memory. The scripts can be sourced as a whole in an interactive RStudio session; unattended key provisioning and multi-file execution are not configured by these entry scripts. `reasoning_effort = NULL` leaves the API's configured default in control.
+
+## Direct LLM interaction (independent of data checks)
+
+Open `llm_example.R`. It uses the same configuration-first layout: sources, request/output settings, editable prompt sections, preview, optional submission. No NetCDF scan or structured reviewer verdict is required. Set `output_dir`, select `model`, set `max_tokens`, and edit role/context/task/evidence/constraints/output/success criteria. Keep `reasoning_effort = NULL` unless the selected model's control is verified. The supplied synthetic prompt can be inspected without an API call; set `send_to_api = TRUE` deliberately to submit the displayed text.
+
+`evidence_files` optionally reads only explicitly selected UTF-8 text files (`txt`, `md`, `R`, `json`, `csv`, `tex`); it does not discover folders or follow URLs. Source labels omit paths, but file contents are sent verbatim: there is no automatic redaction here. Inspect the full prompt for secrets, paths, personal information and unrelated material before submission. Keep private evidence and reports outside the public checkout. Model output is text for human review, never code executed by this client.
+
+Each successful call creates a unique `llm-*` folder containing:
+
+- `prompt.md`: the exact submitted text.
+- `response.md`: the completed answer, also returned as `answer$text` in R.
+- `metadata.json`: requested/returned model, reasoning setting, token budget, usage, finish reason and timestamps.
+
+Failures record metadata; truncated text, when returned, is saved as `response.partial.md`, never as a completed answer. The output directory must be supplied explicitly. No previous output is overwritten and no automatic retries occur. `max_input_bytes` is a configurable byte guard, not a tokenizer. `max_tokens` may include internal reasoning and must be supported by the model. All prompt sections are editable; explicit context is useful but does not guarantee factual correctness or model compliance. Each request is independent and has no browsing or chat history.
+
+Test: `Rscript tests/test_llm.R` (mock responses, no API calls).
