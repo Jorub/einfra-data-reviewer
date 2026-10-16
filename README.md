@@ -9,7 +9,8 @@ Clone/upload this repository into persistent storage and open `einfra-data-revie
 All entry scripts put user settings immediately below their source statements. Set paths locally; do not commit private configuration. There are no file pickers or path prompts. Only the API key uses a hidden prompt.
 
 - `netcdf_example.R`: one file; inspect checks/preview, then optionally submit.
-- `three_file_example.R`: three selected files, processed sequentially; a file error does not stop the next.
+- `three_file_example.R`: selected files, processed sequentially; a file error does not stop the next.
+- `temperature_folder_example.R`: discover the whole temperature tree and review files sequentially.
 - `inventory_sim.R`: local metadata inventory of a directory, no API calls or value scans.
 - `llm_example.R`: independent editable text prompt and Markdown response.
 - `start_here.R`: synthetic CSV example with deliberate errors.
@@ -110,7 +111,7 @@ source("tests/test_llm.R")
 source("tests/test_batch.R")
 ```
 
-Tests use synthetic files and mocked API responses, never real credentials or network inference. They cover filename-derived contracts, units, missing/duplicate periods, CF calendars, annual completeness, monthly boundary acceptance, provenance, coverage screens, unchanged inputs, response validation and per-file errors. These do not prove model diagnostic competence on every family. Test representative real files next; automatic directory-wide review, checkpoint resume, arbitrary multi-level grids, reference-product comparisons and download-manifest checksum checks are not implemented yet.
+Tests use synthetic files and mocked API responses, never real credentials or network inference. They cover filename-derived contracts, units, missing/duplicate periods, CF calendars, annual completeness, monthly boundary acceptance, provenance, coverage screens, unchanged inputs, response validation and per-file errors. These do not prove model diagnostic competence on every family. Test representative real files next; automatic checkpoint resume, arbitrary multi-level grids, reference-product comparisons and download-manifest checksum checks are not implemented yet.
 
 ## Public repository hygiene and style
 
@@ -126,3 +127,13 @@ The original 16 kB client limit was too small for some metadata/history payloads
 ### Required history attribute
 
 `history_provenance` deterministically fails when the global NetCDF history attribute is missing or whitespace-only. It is checked through ncdf4 even when ncdump is unavailable. `include_history = FALSE` withholds history text from the API but does not disable the local presence check; the preview distinguishes withheld from absent history. Presence alone does not establish adequate provenance. No processing steps should be fabricated to fill a missing attribute.
+
+## Entire temperature folder
+
+Use `temperature_folder_example.R`. Set `root` to your temperature folder and `output_dir` to private persistent storage outside it. All settings are at the top. With `recursive = TRUE`, both raw and processed subfolders are included. The script discovers `.nc`, `.nc4` and `.cdf` files, excludes hidden/checkpoint entries and symlinks, prints a file list/total size and builds `file_specs` automatically with family `temperature`. Each filename supplies its own units, period, frequency and scale. No manual scientific expectations are repeated.
+
+Set `send_to_api = TRUE` to explicitly approve the discovered files' built-in review payloads (basename, selected metadata, diagnostics and redacted history). The key is requested once, calls run sequentially and per-file errors do not stop later files. A no-API run saves previews and checks, but clean files remain INCOMPLETE until LLM review. A full rerun repeats scans; resume is not yet implemented. The master index records private input paths locally so equal basenames in raw/processed folders remain distinguishable. The short summary remains only filename/result/reason. Do not publish these reports.
+
+After completion, `input-files.csv` and `excluded-entries.txt` are also saved in the batch folder. The running master index is saved before/after files, so requested inputs remain identifiable even if the process is interrupted. Large daily/hourly files require a complete value scan and can take considerably longer than monthly files; the script does not silently sample.
+
+Additional test: `Rscript tests/test_folder_batch.R` (mock scans, no API calls).

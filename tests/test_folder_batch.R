@@ -1,0 +1,30 @@
+source("R/inventory.R")
+source("R/batch.R")
+root <- tempfile(); dir.create(root)
+for (sub in c("raw", "processed", "raw/.ipynb_checkpoints")) dir.create(file.path(root, sub), recursive = TRUE)
+paths <- c(file.path(root, "raw", "synthetic_t2m_K_land_200001_200012_025_monthly.nc"),
+  file.path(root, "processed", "synthetic_tmin_degC_region_200001_200012_025_daily.nc"),
+  file.path(root, "raw", "synthetic_tmax_K_global_200001_200012_025_yearly.nc4"))
+for (p in paths) writeLines("Discovery fixture only", p)
+writeLines("Excluded fixture", file.path(root, "raw", ".ipynb_checkpoints", "ignored.nc"))
+writeLines("Not a NetCDF input", file.path(root, "notes.txt"))
+invisible(file.symlink(file.path(root, "raw"), file.path(root, "linked")))
+specs <- folder_file_specs(root, family = "temperature")
+stopifnot(length(specs) == 3, setequal(vapply(specs, function(s) s$path, character(1)), normalizePath(paths)))
+stopifnot(all(vapply(specs, function(s) s$family == "temperature", logical(1))))
+stopifnot(!any(vapply(specs, function(s) "expected_units" %in% names(s), logical(1))))
+stopifnot(length(attr(specs, "excluded_entries")) == 2)
+stopifnot(inherits(try(folder_file_specs(root, "unsupported"), silent = TRUE), "try-error"))
+empty <- tempfile(); dir.create(empty)
+stopifnot(inherits(try(folder_file_specs(empty, "temperature"), silent = TRUE), "try-error"))
+# Discovery feeds the existing sequential runner without assuming units/frequency.
+seen <- character()
+check_netcdf <- function(path, family, ...) {
+ seen <<- c(seen, basename(path))
+ stop("Synthetic check failure used to test continuation")
+}
+out <- tempfile(); dir.create(out)
+r <- run_netcdf_reviews(specs, out, send_to_api = FALSE)
+stopifnot(length(seen) == 3, nrow(r$index) == 3, all(r$index$checks_status == "ERROR"))
+unlink(c(root, empty, out), recursive = TRUE)
+cat("Folder discovery and sequential error-continuation tests passed; no NetCDF or API requests made.\n")

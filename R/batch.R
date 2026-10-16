@@ -14,7 +14,11 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
     p <- s$path
     if(is.character(p)&&length(p)==1&&!is.na(p)&&nzchar(p)) basename(p) else "unspecified"
   },character(1))
-  index <- data.frame(input_index = seq_along(file_specs),filename = names_only,
+  input_paths <- vapply(file_specs, function(s) {
+    p <- s$path
+    if (is.character(p) && length(p) == 1 && !is.na(p)) p else ""
+  }, character(1))
+  index <- data.frame(input_index = seq_along(file_specs),filename = names_only,input_path = input_paths,
     variable = "unspecified",checks_status = "PENDING",llm_status = "NOT_RUN",result = "INCOMPLETE",
     reason = "Not processed yet",report_path = "",stringsAsFactors = FALSE)
   checkpoint <- function() {
@@ -97,4 +101,20 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
   }
   message("Batch finished. Short summary: ",file.path(batch,"summary.csv"))
   invisible(list(index = index,run_dir = batch))
+}
+
+# Discovery only: no values or API calls. Expectations still come from filenames.
+folder_file_specs <- function(root, family, recursive = TRUE,
+                              scan_values = TRUE, use_system_tools = TRUE,
+                              include_history = TRUE) {
+  allowed <- c("evap", "other", "precip", "runoff", "snow", "soilmoisture", "temperature")
+  if (length(family) != 1 || !family %in% allowed) stop("Choose one supported family for this folder.")
+  files <- netcdf_file_inventory(root, recursive = recursive)
+  excluded <- attr(files, "excluded_entries")
+  if (!length(files)) stop("No eligible .nc, .nc4 or .cdf files found under the selected root.")
+  specs <- lapply(sort(unique(as.character(files))), function(path) list(
+    path = path, family = family, scan_values = scan_values,
+    use_system_tools = use_system_tools, include_history = include_history))
+  attr(specs, "excluded_entries") <- excluded
+  specs
 }
