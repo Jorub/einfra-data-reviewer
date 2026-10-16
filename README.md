@@ -67,3 +67,13 @@ After upgrading, rerun `source("R/reviewer.R")`, `source("R/netcdf.R")`, and `ch
 The `scientific-triage-v2` prompt requests independent plausibility assessment, prioritised actionable findings, explicit confidence levels and discriminating next checks. It distinguishes a wrong operation recorded in history from proof that it fully explains the current file. Routine PASS entries are compacted to their check names; failures, coverage gaps and scientific evidence remain. Existing previews must be rebuilt after reloading `R/reviewer.R`.
 
 A server-wide weekend runner is **not ready yet**. The current checker remains a specialised monthly Celsius pilot. See `docs/batch-review-design.md` for its audited limitations and the proposed variable contracts, persistent per-file checkpoints, local flagged-filename lists, API budgets and incomplete-review handling. Do not use the pilot's default scientific expectations as a contract for unrelated variables.
+
+## Inventory the sim tree before configuring the weekend audit
+
+Run `inventory_sim.R` section by section in RStudio. Enter the data root and a private report directory outside the root at the prompts. No directory is hard-coded. This first stage reads metadata only, makes no API calls, and does not judge scientific correctness. It records every NetCDF data-variable candidate (not only the first), identifies common bounds/grid-mapping auxiliary variables, and records unreadable files without abandoning the rest of the inventory.
+
+The discovery step accepts `.nc`, `.nc4`, and `.cdf`, skips hidden directories/files (including `.ipynb_checkpoints`) and symlinks, and records those excluded entries locally. CSV/tabular and compressed NetCDF files are not included. Folder names provide unverified hints for the environmental families under sim; filename suffixes provide unverified daily/monthly/annual hints. Neither is a scientific contract.
+
+Local outputs are `inventory.csv` (contains paths and metadata), `inventory-summary.csv` (family/stage/frequency/role/status counts, without paths), and an RDS progress checkpoint. Summary counts are variable records, not necessarily distinct files. The current inventory can be rerun but does not yet resume from its checkpoint. Review the summary before sharing it; keep detailed reports private.
+
+Test: `Rscript tests/test_inventory.R`. Next use the inventory to establish variable and temporal/grid contracts before enabling a full numerical scan and LLM batch review. The temperature checker still must not be applied unchanged to all environmental variables.
