@@ -43,28 +43,28 @@ inventory_netcdf <- function(root, report_dir, recursive = TRUE) {
   rows <- list()
   empty_row <- function(path) {
     rel <- substring(path,nchar(root)+2L)
-    pieces <- strsplit(rel,"/",fixed=TRUE)[[1]]
+    pieces <- strsplit(rel,"/",fixed = TRUE)[[1]]
     info <- file.info(path)
-    data.frame(path=path,filename=basename(path),relative_path=rel,
-      bytes=info$size,modified_utc=format(info$mtime,tz="UTC",usetz=TRUE),
-      family_hint=sim_family_hint(rel),
-      stage_hint=if("raw" %in% pieces) "raw" else if("processed" %in% pieces) "processed" else "unspecified",
-      frequency_hint=if(grepl("(^|_)daily([_.]|$)",basename(path))) "daily" else
+    data.frame(path = path,filename = basename(path),relative_path = rel,
+      bytes = info$size,modified_utc = format(info$mtime,tz = "UTC",usetz = TRUE),
+      family_hint = sim_family_hint(rel),
+      stage_hint = if("raw" %in% pieces) "raw" else if("processed" %in% pieces) "processed" else "unspecified",
+      frequency_hint = if(grepl("(^|_)daily([_.]|$)",basename(path))) "daily" else
         if(grepl("(^|_)monthly([_.]|$)",basename(path))) "monthly" else
         if(grepl("(^|_)(annual|yearly)([_.]|$)",basename(path))) "annual" else "unknown",
-      variable=NA_character_,role="unclassified",units=NA_character_,long_name=NA_character_,
-      standard_name=NA_character_,dimensions=NA_character_,calendar=NA_character_,
-      time_units=NA_character_,inspection_status="METADATA_ONLY",note="Values and scientific expectations not checked",
-      stringsAsFactors=FALSE)
+      variable = NA_character_,role = "unclassified",units = NA_character_,long_name = NA_character_,
+      standard_name = NA_character_,dimensions = NA_character_,calendar = NA_character_,
+      time_units = NA_character_,inspection_status = "METADATA_ONLY",note = "Values and scientific expectations not checked",
+      stringsAsFactors = FALSE)
   }
   inspect_one <- function(path) {
     base <- empty_row(path)
     tryCatch({
       n <- ncdf4::nc_open(path)
       on.exit(ncdf4::nc_close(n))
-      att <- function(v,a,default="") {
+      att <- function(v,a,default = "") {
         x <- ncdf4::ncatt_get(n,v,a)
-        if(isTRUE(x$hasatt)) paste(x$value,collapse=" ") else default
+        if(isTRUE(x$hasatt)) paste(x$value,collapse = " ") else default
       }
       auxiliary <- unique(unlist(lapply(c(names(n$dim),names(n$var)),function(v)
         c(att(v,"bounds"),att(v,"grid_mapping")))))
@@ -80,15 +80,15 @@ inventory_netcdf <- function(root, report_dir, recursive = TRUE) {
         row$standard_name <- att(name,"standard_name")
         ds <- vapply(v$dim,function(d)d$name,character(1))
         lens <- vapply(v$dim,function(d)d$len,numeric(1))
-        row$dimensions <- as.character(jsonlite::toJSON(as.list(setNames(lens,ds)),auto_unbox=TRUE))
-        td <- v$dim[vapply(v$dim,function(d) tolower(d$name) %in% c("time","valid_time") || grepl(" since ",tolower(d$units),fixed=TRUE),logical(1))]
+        row$dimensions <- as.character(jsonlite::toJSON(as.list(setNames(lens,ds)),auto_unbox = TRUE))
+        td <- v$dim[vapply(v$dim,function(d) tolower(d$name) %in% c("time","valid_time") || grepl(" since ",tolower(d$units),fixed = TRUE),logical(1))]
         if(length(td)==1) {
           row$calendar <- att(td[[1]]$name,"calendar","standard")
           row$time_units <- td[[1]]$units
         }
         row
       }))
-    },error=function(e) {
+    },error = function(e) {
       base$inspection_status <- "ERROR";base$note <- conditionMessage(e);base
     })
   }
@@ -99,11 +99,11 @@ inventory_netcdf <- function(root, report_dir, recursive = TRUE) {
     saveRDS(do.call(rbind,rows),file.path(report_dir,"inventory-progress.rds"))
   }
   result <- if(length(rows)) do.call(rbind,rows) else empty_row(file.path(root,"placeholder"))[FALSE,]
-  write.csv(result,file.path(report_dir,"inventory.csv"),row.names=FALSE,na="")
+  write.csv(result,file.path(report_dir,"inventory.csv"),row.names = FALSE,na = "")
   summary <- if(nrow(result)) aggregate(rep(1L,nrow(result)),
     result[c("family_hint","stage_hint","frequency_hint","role","inspection_status")],sum) else data.frame()
   if(ncol(summary)) names(summary)[ncol(summary)] <- "variable_records"
-  write.csv(summary,file.path(report_dir,"inventory-summary.csv"),row.names=FALSE)
+  write.csv(summary,file.path(report_dir,"inventory-summary.csv"),row.names = FALSE)
   message("Inventory complete: ",length(files)," files; ",nrow(result)," variable records. No API requests made.")
   invisible(result)
 }

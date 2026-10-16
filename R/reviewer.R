@@ -16,18 +16,18 @@ clear_api_key <- function() {
 }
 # Whitelist diagnostic categories only; never print arbitrary provider text.
 http_error_summary <- function(status, body) {
-  parsed <- tryCatch(jsonlite::fromJSON(rawToChar(body),simplifyVector=FALSE),error=function(e) NULL)
+  parsed <- tryCatch(jsonlite::fromJSON(rawToChar(body),simplifyVector = FALSE),error = function(e) NULL)
   error <- if(is.list(parsed)) parsed$error else NULL
   message <- if(is.list(error)) error$message else NULL
   parameter <- if(is.list(error)) error$param else NULL
   mentions_effort <- identical(parameter,"reasoning_effort") ||
-    (is.character(message) && length(message)==1 && grepl("reasoning_effort",message,fixed=TRUE))
+    (is.character(message) && length(message)==1 && grepl("reasoning_effort",message,fixed = TRUE))
   paste0("API HTTP ",status,if(mentions_effort) "; provider error refers to reasoning_effort" else "",
          "; raw response body suppressed.")
 }
 review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) {
-  request <- list(model=model,messages=list(list(role="user",content=payload)),
-                  max_tokens=max_tokens,stream=FALSE)
+  request <- list(model = model,messages = list(list(role = "user",content = payload)),
+                  max_tokens = max_tokens,stream = FALSE)
   if(!is.null(reasoning_effort)) request$reasoning_effort <- reasoning_effort
   request
 }
@@ -41,7 +41,7 @@ api_request <- function(route, payload = NULL) {
     payload, auto_unbox = TRUE, null = "null"))
   response <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, route), handle = h),
     error = function(e) stop("API connection failed; details suppressed to protect credentials.", call. = FALSE))
-  if (response$status_code != 200L) stop(http_error_summary(response$status_code,response$content),call.=FALSE)
+  if (response$status_code != 200L) stop(http_error_summary(response$status_code,response$content),call. = FALSE)
   tryCatch(jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE),
     error = function(e) stop("API returned invalid JSON; body suppressed."))
 }
@@ -113,7 +113,7 @@ prepare_review <- function(checks) {
 }
 
 parse_review_response <- function(text) {
-  result <- tryCatch(jsonlite::fromJSON(text,simplifyVector=FALSE),error=function(e) NULL)
+  result <- tryCatch(jsonlite::fromJSON(text,simplifyVector = FALSE),error = function(e) NULL)
   required <- c("verdict","reason","report_markdown")
   if(!is.list(result) || length(result)!=3 || !setequal(names(result),required)) return(NULL)
   if(!all(vapply(result,function(x) is.character(x)&&length(x)==1&&!is.na(x)&&nzchar(trimws(x)),logical(1)))) return(NULL)
@@ -123,16 +123,16 @@ parse_review_response <- function(text) {
 review_summary <- function(checks, llm_status, parsed = NULL) {
   f <- attr(checks,"review_evidence")$filename$basename
   if(is.null(f)) f <- "unspecified"
-  failed <- checks[checks$status %in% c("FAIL","WARN"),,drop=FALSE]
+  failed <- checks[checks$status %in% c("FAIL","WARN"),,drop = FALSE]
   # Deterministic flags survive any API outcome or mistaken model PASS.
   status <- if(nrow(failed)) "FAIL" else if(!identical(llm_status,"COMPLETED")) "INCOMPLETE" else parsed$verdict
   reasons <- if(!is.null(parsed) && parsed$verdict=="FAIL") parsed$reason else
-    if(nrow(failed)) paste(paste0(head(failed$check,2),": ",head(failed$detail,2)),collapse="; ") else
+    if(nrow(failed)) paste(paste0(head(failed$check,2),": ",head(failed$detail,2)),collapse = "; ") else
     if(!is.null(parsed)) parsed$reason else character()
   if(nrow(failed)>2 && (is.null(parsed) || parsed$verdict!="FAIL"))
     reasons <- c(reasons,paste(nrow(failed)-2,"additional deterministic flags; see detailed checks"))
   if(llm_status!="COMPLETED") reasons <- c(reasons,paste("LLM review",llm_status))
-  data.frame(filename=f,result=status,reason=paste(reasons,collapse="; "),stringsAsFactors=FALSE)
+  data.frame(filename = f,result = status,reason = paste(reasons,collapse = "; "),stringsAsFactors = FALSE)
 }
 review_checks <- function(checks, model, approved_payload, send = FALSE,
                           report_dir, max_tokens = 8192L, reasoning_effort = NULL) {
@@ -153,28 +153,28 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   write.csv(checks, file.path(run, "checks.csv"), row.names = FALSE)
   saveRDS(checks,file.path(run,"local-diagnostics.rds"))
   # Create a conservative checkpoint before contacting the API.
-  write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names=FALSE)
-  metadata <- list(requested_model=model,returned_model=NULL,reasoning_effort=reasoning_effort,finish_reason=NULL,usage=NULL,
-    complete=FALSE,llm_status="NOT_COMPLETED",deterministic_failures=sum(checks$status=="FAIL"),
-    deterministic_warnings=sum(checks$status=="WARN"),prompt_version="scientific-triage-v3-json",
-    time_utc=format(Sys.time(),tz="UTC",usetz=TRUE))
-  save_status <- function(status,parsed=NULL) {
+  write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names = FALSE)
+  metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,finish_reason = NULL,usage = NULL,
+    complete = FALSE,llm_status = "NOT_COMPLETED",deterministic_failures = sum(checks$status=="FAIL"),
+    deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v3-json",
+    time_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
+  save_status <- function(status,parsed = NULL) {
     metadata$llm_status <- status
     metadata$complete <- identical(status,"COMPLETED")
-    jsonlite::write_json(metadata,file.path(run,"metadata.json"),auto_unbox=TRUE,pretty=TRUE,null="null")
+    jsonlite::write_json(metadata,file.path(run,"metadata.json"),auto_unbox = TRUE,pretty = TRUE,null = "null")
     summary <- review_summary(checks,status,parsed)
-    write.csv(summary,file.path(run,"summary.csv"),row.names=FALSE)
-    index <- cbind(summary,variable=if(is.null(attr(checks,"review_evidence")$observed$variable)) "unspecified" else
-      attr(checks,"review_evidence")$observed$variable,checks_status="COMPLETED",llm_status=status,report_path=run)
-    write.csv(index,file.path(run,"review_index.csv"),row.names=FALSE)
+    write.csv(summary,file.path(run,"summary.csv"),row.names = FALSE)
+    index <- cbind(summary,variable = if(is.null(attr(checks,"review_evidence")$observed$variable)) "unspecified" else
+      attr(checks,"review_evidence")$observed$variable,checks_status = "COMPLETED",llm_status = status,report_path = run)
+    write.csv(index,file.path(run,"review_index.csv"),row.names = FALSE)
     invisible(NULL)
   }
   save_status("NOT_COMPLETED")
   result <- tryCatch(api_request("/chat/completions",review_request(model,payload,max_tokens,reasoning_effort)),
-    error=function(e) {
+    error = function(e) {
       save_status("API_ERROR")
       writeLines("API review failed; deterministic results retained.",file.path(run,"INCOMPLETE.txt"))
-      stop("API review failed. Report: ",run,". ",conditionMessage(e),call.=FALSE)
+      stop("API review failed. Report: ",run,". ",conditionMessage(e),call. = FALSE)
     })
   choice <- if(is.list(result$choices)&&length(result$choices)) result$choices[[1]] else NULL
   text <- choice$message$content
@@ -188,7 +188,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
     status <- if(identical(choice$finish_reason,"length")) "TOKEN_LIMIT" else
       if(!content_ok) "EMPTY_RESPONSE" else "INVALID_RESPONSE"
     save_status(status)
-    stop("Incomplete model response (",status,"). Inspect metadata.json and summary.csv in ",run,call.=FALSE)
+    stop("Incomplete model response (",status,"). Inspect metadata.json and summary.csv in ",run,call. = FALSE)
   }
   writeLines(parsed$report_markdown,file.path(run,"review.md"))
   save_status("COMPLETED",parsed)

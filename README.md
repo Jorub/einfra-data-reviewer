@@ -140,3 +140,7 @@ Input order is preserved and duplicate basenames are distinguished by input inde
 With `send_to_api = FALSE`, the runner makes no API calls and saves previews; unreviewed clean files remain INCOMPLETE. Inspect these before explicitly approving the three selected filenames/metadata/summaries/redacted histories via `send_to_api = TRUE`. No data-root discovery or parallel execution is performed by this pilot.
 
 Test: `Rscript tests/test_batch.R` uses mock checks/API reviews to establish that failures do not stop later files. Real multi-file testing must be completed in the server environment.
+
+## R coding style
+
+Use a space before and after `=` in assignments, function defaults and named arguments, for example `max_tokens = max_tokens`. Preserve comparison operators and quoted text.

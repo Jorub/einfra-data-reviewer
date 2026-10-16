@@ -4,15 +4,15 @@ parse_netcdf_filename <- function(path) {
   fields <- strsplit(sub("\\.(nc|nc4|cdf)$", "", name, ignore.case = TRUE), "_", fixed = TRUE)[[1]]
   issues <- character()
   if (length(fields) != 8 || any(!nzchar(fields)))
-    return(list(basename=name, valid=FALSE, issues="Expected eight nonempty underscore-separated fields"))
+    return(list(basename = name, valid = FALSE, issues = "Expected eight nonempty underscore-separated fields"))
   names(fields) <- c("source","variable","units","spatial_coverage","start","end","spatial_resolution","frequency")
   date_ok <- function(x) grepl("^[0-9]{6}$",x) && substr(x,5,6) %in% sprintf("%02d",1:12) && substr(x,1,4)!="0000"
   if (!date_ok(fields['start'])) issues <- c(issues,"Malformed start date; expected YYYYMM")
   if (!date_ok(fields['end'])) issues <- c(issues,"Malformed end date; expected YYYYMM")
   if (!length(issues) && fields['start']>fields['end']) issues <- c(issues,"Start date is later than end date")
   if (!fields['frequency'] %in% c("hourly","daily","monthly","yearly","annual")) issues <- c(issues,"Unrecognized temporal frequency")
-  list(basename=name, valid=!length(issues), fields=as.list(fields), issues=issues,
-       note="Filename fields are claims, not verified metadata. Resolution code 025 means 0.25 degrees; other codes require an agreed mapping.")
+  list(basename = name, valid = !length(issues), fields = as.list(fields), issues = issues,
+       note = "Filename fields are claims, not verified metadata. Resolution code 025 means 0.25 degrees; other codes require an agreed mapping.")
 }
 
 # Reduce disclosure from free-text history; review the preview before submission.
@@ -67,7 +67,7 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
   dims <- c(lon = find_dim("lon"), lat = find_dim("lat"), time = find_dim("time"))
   add("coordinate_dimensions", !anyNA(dims), "Requires uniquely identifiable longitude, latitude and time dimensions")
   filename <- parse_netcdf_filename(path)
-  add("filename_format", filename$valid, if(filename$valid) "Eight fields and valid YYYYMM dates" else paste(filename$issues,collapse="; "))
+  add("filename_format", filename$valid, if(filename$valid) "Eight fields and valid YYYYMM dates" else paste(filename$issues,collapse = "; "))
   evidence <- list(filename = filename, contract = list(variable = variable, units = expected_units,
     resolution_degrees = resolution, first_month = start_month, last_month = end_month,
     records = length(expected_months), global_grid = global_grid),
@@ -163,7 +163,7 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     timezone_ok <- !grepl("[+-][0-9]{2}:?[0-9]{2}$", origin_text)
     origin <- tryCatch(as.POSIXct(origin_text, tz = "UTC"), error = function(e) NA)
     if (timezone_ok && !is.na(origin)) {
-      multiplier <- switch(substr(tolower(parts[2]), 1, 1), s=1, m=60, h=3600, d=86400)
+      multiplier <- switch(substr(tolower(parts[2]), 1, 1), s = 1, m = 60, h = 3600, d = 86400)
       dates <- as.Date(origin + t * multiplier, tz = "UTC")
       # Standard mixed calendars before the Gregorian reform require a CF decoder.
       if (calendar != "proleptic_gregorian" && (any(dates < as.Date("1582-10-15")) || as.Date(origin) < as.Date("1582-10-15"))) dates <- NULL
@@ -192,7 +192,7 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     years <- sort(unique(substr(months,1,4)))
     incomplete <- lapply(years,function(y) {
       missing <- setdiff(paste0(y,"-",sprintf("%02d",1:12)),months)
-      if(length(missing)) data.frame(year=y,missing_months=paste(missing,collapse=", ")) else NULL
+      if(length(missing)) data.frame(year = y,missing_months = paste(missing,collapse = ", ")) else NULL
     })
     incomplete <- do.call(rbind,incomplete)
     add("complete_years", if(is.null(incomplete)) "PASS" else "WARN",
@@ -209,22 +209,22 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     message("Scanning ",nt," time slices read-only; fill values and scale/offset handled by ncdf4.")
     for (i in seq_len(nt)) {
       start <- rep(1, length(dl)); count <- dl; start[ti] <- i; count[ti] <- 1
-      values <- as.vector(ncdf4::ncvar_get(nc, variable, start=start, count=count))
+      values <- as.vector(ncdf4::ncvar_get(nc, variable, start = start, count = count))
       good <- values[is.finite(values)]
-      q <- if(length(good)) as.numeric(quantile(good,c(0,.01,.5,.99,1),names=FALSE)) else rep(NA_real_,5)
-      stats[[i]] <- data.frame(index=i, missing=sum(is.na(values)), nonfinite=sum(!is.finite(values)&!is.na(values)),
-        finite=length(good), total=length(values), min=q[1],p01=q[2],median=q[3],p99=q[4],max=q[5])
+      q <- if(length(good)) as.numeric(quantile(good,c(0,.01,.5,.99,1),names = FALSE)) else rep(NA_real_,5)
+      stats[[i]] <- data.frame(index = i, missing = sum(is.na(values)), nonfinite = sum(!is.finite(values)&!is.na(values)),
+        finite = length(good), total = length(values), min = q[1],p01 = q[2],median = q[3],p99 = q[4],max = q[5])
     }
     stats <- do.call(rbind,stats)
     add("nonfinite_values", sum(stats$nonfinite)==0, paste(sum(stats$nonfinite),"nonmissing nonfinite values"))
     add("nonempty_time_slices", all(stats$finite>0), paste(sum(stats$finite==0),"time slices without finite values"))
-    evidence$value_scan <- list(scope="All time slices; unweighted spatial quantiles, not land-area means",
-      slices=nt, finite_min=min(stats$finite), finite_max=max(stats$finite),
-      missing_fraction_min=min(stats$missing/stats$total),missing_fraction_max=max(stats$missing/stats$total),
-      representative_slices=stats[unique(round(seq(1,nt,length.out=min(8,nt)))),])
+    evidence$value_scan <- list(scope = "All time slices; unweighted spatial quantiles, not land-area means",
+      slices = nt, finite_min = min(stats$finite), finite_max = max(stats$finite),
+      missing_fraction_min = min(stats$missing/stats$total),missing_fraction_max = max(stats$missing/stats$total),
+      representative_slices = stats[unique(round(seq(1,nt,length.out = min(8,nt)))),])
     if (any(stats$finite>0)) {
-      evidence$value_scan$global_min <- min(stats$min,na.rm=TRUE)
-      evidence$value_scan$global_max <- max(stats$max,na.rm=TRUE)
+      evidence$value_scan$global_min <- min(stats$min,na.rm = TRUE)
+      evidence$value_scan$global_max <- max(stats$max,na.rm = TRUE)
     }
     evidence$limits <- c(evidence$limits,"Raw value/scale inconsistencies are hypotheses for review; no reference-product comparison was performed.")
   } else add("value_scan", "NOT_CHECKED", "Value scan disabled or extra dimensions require explicit selection")
@@ -232,11 +232,11 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
   if (use_system_tools) {
     run <- function(executable,args) {
       exe <- Sys.which(executable)
-      if (!nzchar(exe)) return(list(status="NOT_CHECKED",output=character()))
+      if (!nzchar(exe)) return(list(status = "NOT_CHECKED",output = character()))
       err <- tempfile(); on.exit(unlink(err))
-      out <- suppressWarnings(tryCatch(system2(exe,args=args,stdout=TRUE,stderr=err),error=function(e) structure(character(),status=1L)))
+      out <- suppressWarnings(tryCatch(system2(exe,args = args,stdout = TRUE,stderr = err),error = function(e) structure(character(),status = 1L)))
       status <- attr(out,"status"); if(is.null(status)) status <- 0L
-      list(status=if(status==0) "PASS" else "NOT_CHECKED",output=out)
+      list(status = if(status==0) "PASS" else "NOT_CHECKED",output = out)
     }
     format_result <- run("ncdump",c("-k",shQuote(path)))
     add("ncdump_readability",format_result$status,"Independent format query; unavailable tools or failures are not a data verdict")
@@ -253,7 +253,7 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     tool_results$cdo <- cdo_result
   } else add("system_tools","NOT_CHECKED","External tool queries disabled")
   result <- finish()
-  if(exists("stats",inherits=FALSE)) attr(result,"local_slice_statistics") <- stats
+  if(exists("stats",inherits = FALSE)) attr(result,"local_slice_statistics") <- stats
   attr(result,"local_tool_results") <- tool_results
   result
 }

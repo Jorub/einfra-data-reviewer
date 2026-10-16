@@ -40,19 +40,19 @@ evidence_text <- paste(
 evidence_files <- character()         # optional explicit UTF-8 text paths; no automatic file discovery
 
 # Build and preview ==========================================================
-file_evidence <- read_prompt_evidence(evidence_files,max_bytes=max_input_bytes)
+file_evidence <- read_prompt_evidence(evidence_files,max_bytes = max_input_bytes)
 prompt <- build_prompt(role,context,task,
-  evidence=paste(evidence_text,file_evidence,sep="\n\n"),
-  constraints=constraints,output_format=output_format,success_criteria=success_criteria)
+  evidence = paste(evidence_text,file_evidence,sep = "\n\n"),
+  constraints = constraints,output_format = output_format,success_criteria = success_criteria)
 cat(prompt,"\n")
 
 # Optional API call ==========================================================
 # Only the API key is prompted interactively; never put it in this script.
 if(send_to_api) {
-  if(!exists("key",envir=.einfra,inherits=FALSE)) set_api_key()
-  answer <- ask_llm(prompt=prompt,model=model,output_dir=output_dir,
-    approved_prompt=prompt,send=TRUE,max_tokens=max_tokens,
-    reasoning_effort=reasoning_effort,max_input_bytes=max_input_bytes)
+  if(!exists("key",envir = .einfra,inherits = FALSE)) set_api_key()
+  answer <- ask_llm(prompt = prompt,model = model,output_dir = output_dir,
+    approved_prompt = prompt,send = TRUE,max_tokens = max_tokens,
+    reasoning_effort = reasoning_effort,max_input_bytes = max_input_bytes)
   cat(answer$text,"\n")
   print(answer$run_dir)
 }
