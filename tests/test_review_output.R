@@ -20,7 +20,7 @@ api_request <- function(route,payload) {
     report_markdown="## Findings\nRecorded addc conversion has the wrong sign. Verify source before repair."),auto_unbox=TRUE)))),
   usage=list(completion_tokens=100))
 }
-run <- review_checks(checks,"mock",p,send=TRUE,report_dir=output)
+run <- review_checks(checks,"mock",p,send=TRUE,report_dir=output,reasoning_effort="medium")
 r <- read.csv(file.path(run,"summary.csv"))
 stopifnot(identical(names(r),c("filename","result","reason")),r$result=="FAIL",file.exists(file.path(run,"review.md")))
 m <- jsonlite::read_json(file.path(run,"metadata.json"));stopifnot(m$complete,m$llm_status=="COMPLETED",m$reasoning_effort=="medium")
@@ -53,3 +53,12 @@ s$filename <- "synthetic,example.nc";f<-file.path(output,"quoted.csv");write.csv
 stopifnot(identical(read.csv(f,stringsAsFactors=FALSE),s))
 unlink(output,recursive=TRUE)
 cat("Filename parsing, JSON schema, detailed report, CSV quoting, deterministic precedence and incomplete-response checkpoint tests passed. No live API calls.\n")
+
+stopifnot(is.null(review_request("mock","test",8192)$reasoning_effort))
+stopifnot(!"reasoning_effort" %in% names(review_request("mock","test",8192)))
+stopifnot(review_request("mock","test",8192,"medium")$reasoning_effort=="medium")
+b <- charToRaw('{"error":{"message":"Unsupported reasoning_effort; FAKE_PRIVATE_SENTINEL","param":"reasoning_effort"}}')
+z <- http_error_summary(400,b)
+stopifnot(grepl("reasoning_effort",z,fixed=TRUE),!grepl("FAKE_PRIVATE_SENTINEL",z,fixed=TRUE))
+stopifnot(!grepl("FAKE_PRIVATE_SENTINEL",http_error_summary(400,charToRaw("FAKE_PRIVATE_SENTINEL")),fixed=TRUE))
+cat("Optional reasoning field and whitelisted HTTP diagnostic tests passed.\n")

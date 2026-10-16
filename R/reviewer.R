@@ -14,6 +14,23 @@ clear_api_key <- function() {
   if (exists("key", envir = .einfra, inherits = FALSE)) rm("key", envir = .einfra)
   invisible(NULL)
 }
+# Whitelist diagnostic categories only; never print arbitrary provider text.
+http_error_summary <- function(status, body) {
+  parsed <- tryCatch(jsonlite::fromJSON(rawToChar(body),simplifyVector=FALSE),error=function(e) NULL)
+  error <- if(is.list(parsed)) parsed$error else NULL
+  message <- if(is.list(error)) error$message else NULL
+  parameter <- if(is.list(error)) error$param else NULL
+  mentions_effort <- identical(parameter,"reasoning_effort") ||
+    (is.character(message) && length(message)==1 && grepl("reasoning_effort",message,fixed=TRUE))
+  paste0("API HTTP ",status,if(mentions_effort) "; provider error refers to reasoning_effort" else "",
+         "; raw response body suppressed.")
+}
+review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) {
+  request <- list(model=model,messages=list(list(role="user",content=payload)),
+                  max_tokens=max_tokens,stream=FALSE)
+  if(!is.null(reasoning_effort)) request$reasoning_effort <- reasoning_effort
+  request
+}
 api_request <- function(route, payload = NULL) {
   if (!route %in% c("/models", "/chat/completions")) stop("Unsupported API route.")
   if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Run set_api_key() first.")
@@ -24,7 +41,7 @@ api_request <- function(route, payload = NULL) {
     payload, auto_unbox = TRUE, null = "null"))
   response <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, route), handle = h),
     error = function(e) stop("API connection failed; details suppressed to protect credentials.", call. = FALSE))
-  if (response$status_code != 200L) stop(sprintf("API HTTP %d; response body suppressed.", response$status_code))
+  if (response$status_code != 200L) stop(http_error_summary(response$status_code,response$content),call.=FALSE)
   tryCatch(jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE),
     error = function(e) stop("API returned invalid JSON; body suppressed."))
 }
@@ -118,10 +135,10 @@ review_summary <- function(checks, llm_status, parsed = NULL) {
   data.frame(filename=f,result=status,reason=paste(reasons,collapse="; "),stringsAsFactors=FALSE)
 }
 review_checks <- function(checks, model, approved_payload, send = FALSE,
-                          report_dir, max_tokens = 8192L, reasoning_effort = "medium") {
-  if(length(reasoning_effort)!=1 || is.na(reasoning_effort) ||
-     !reasoning_effort %in% c("low","medium","high"))
-    stop("reasoning_effort must be low, medium or high.")
+                          report_dir, max_tokens = 8192L, reasoning_effort = NULL) {
+  if(!is.null(reasoning_effort) && (length(reasoning_effort)!=1 || is.na(reasoning_effort) ||
+     !reasoning_effort %in% c("low","medium","high")))
+    stop("reasoning_effort must be NULL, low, medium or high.")
   payload <- as.character(prepare_review(checks))
   if (!isTRUE(send)) stop("Preview prepare_review(checks), then explicitly set send = TRUE.")
   if (!identical(as.character(approved_payload), payload)) stop("Checks changed since preview; preview again.")
@@ -153,8 +170,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
     invisible(NULL)
   }
   save_status("NOT_COMPLETED")
-  result <- tryCatch(api_request("/chat/completions",list(model=model,
-    messages=list(list(role="user",content=payload)),max_tokens=max_tokens,reasoning_effort=reasoning_effort,stream=FALSE)),
+  result <- tryCatch(api_request("/chat/completions",review_request(model,payload,max_tokens,reasoning_effort)),
     error=function(e) {
       save_status("API_ERROR")
       writeLines("API review failed; deterministic results retained.",file.path(run,"INCOMPLETE.txt"))

@@ -27,6 +27,6 @@ cat(preview)
 # saveRDS(checks, file.path(report_dir, "netcdf-local-diagnostics.rds"))
 # run <- review_checks(checks, model = "thinker", approved_payload = preview,
 #               send = TRUE, report_dir = report_dir, max_tokens = 8192L,
-#               reasoning_effort = "medium")
+#               reasoning_effort = NULL) # omit unverified model-specific control
 # read.csv(file.path(run, "summary.csv")) # capture run <- review_checks(...) above
 # clear_api_key()

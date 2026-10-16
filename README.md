@@ -95,3 +95,9 @@ Tests: `Rscript tests/test_review_output.R` uses mock API responses (no network)
 ## Reasoning effort
 
 `review_checks()` now defaults to `reasoning_effort = "medium"` and sends that field in the Chat Completions request. Choose `"low"`, `"medium"`, or `"high"`; the requested setting is recorded in `metadata.json`. Whether and how the selected gateway model honors this field must be confirmed in a live run. A medium setting does not guarantee completion within the token budget. It cannot alter an already submitted request. Reloading the reviewer module resets the in-memory key; re-enter it before retrying. Existing `checks` can be reused without another data scan, but rebuild and inspect the preview after reloading.
+
+### Correction: reasoning controls are model-specific
+
+Following an HTTP 400 when requesting medium effort from `thinker`, the default has been restored to `reasoning_effort = NULL`, which omits the parameter entirely (it does not disable reasoning). Explicit low/medium/high settings remain available only for models verified to accept them. The earlier claim of a generally supported medium default was not verified. The local offload helper uses the same top-level field, but accepting an option in a client does not establish provider/model support.
+
+The HTTP diagnostic now indicates when a structured provider error mentions `reasoning_effort`. It never prints arbitrary error text, raw bodies or headers. A 400 by itself does not prove the effort setting was the cause. No automatic retry or silent parameter substitution is performed. Documentation: https://docs-ng.cerit.io/en/docs/ai-as-a-service/ai-api#reasoning-models-in-the-api
