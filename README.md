@@ -123,3 +123,20 @@ Each successful call creates a unique `llm-*` folder containing:
 Failures record metadata; truncated text, when returned, is saved as `response.partial.md`, never as a completed answer. The output directory must be supplied explicitly. No previous output is overwritten and no automatic retries occur. `max_input_bytes` is a configurable byte guard, not a tokenizer. `max_tokens` may include internal reasoning and must be supported by the model. All prompt sections are editable; explicit context is useful but does not guarantee factual correctness or model compliance. Each request is independent and has no browsing or chat history.
 
 Test: `Rscript tests/test_llm.R` (mock responses, no API calls).
+
+## Sequential three-file pilot
+
+Use `three_file_example.R`: edit the three `file_specs` and output/model settings at the top. Each input has its own explicit expected units, resolution, monthly dates and global/regional setting. This remains a monthly Celsius regular-grid pilot, not the all-variable weekend runner. Sources run once, authentication is prompted once before the loop if needed, and all calls reuse the memory-only key. The example optionally clears it at the end.
+
+Default behavior is **record the error and move on**, with no automatic retry. Read errors, request errors, truncation and invalid model responses remain distinguishable in the index. Unexpected per-file exceptions are caught too. The results are checkpointed after every file in one batch folder:
+
+- `summary.csv`: filename, result, reason.
+- `review_index.csv`: every requested input, variable, check/LLM status and report path.
+- `flagged_files.csv`: all rows requiring attention, including INCOMPLETE.
+- Per-file folders: checks, preview, diagnostic object and detailed model report when available.
+
+Input order is preserved and duplicate basenames are distinguished by input index/report path. FAIL means a known deterministic/model flag; an incomplete LLM call cannot turn an existing FAIL into PASS. An unreadable file is INCOMPLETE with check status ERROR. Pending files are listed before the loop begins. A lost output filesystem, killed R process or container shutdown cannot be solved by per-file exception handling; keep the output in persistent writable storage. The runner writes progress but does not yet implement checkpoint resume or retry-only execution. A full rerun repeats scans and calls and creates a new batch folder.
+
+With `send_to_api = FALSE`, the runner makes no API calls and saves previews; unreviewed clean files remain INCOMPLETE. Inspect these before explicitly approving the three selected filenames/metadata/summaries/redacted histories via `send_to_api = TRUE`. No data-root discovery or parallel execution is performed by this pilot.
+
+Test: `Rscript tests/test_batch.R` uses mock checks/API reviews to establish that failures do not stop later files. Real multi-file testing must be completed in the server environment.
