@@ -101,3 +101,9 @@ Tests: `Rscript tests/test_review_output.R` uses mock API responses (no network)
 Following an HTTP 400 when requesting medium effort from `thinker`, the default has been restored to `reasoning_effort = NULL`, which omits the parameter entirely (it does not disable reasoning). Explicit low/medium/high settings remain available only for models verified to accept them. The earlier claim of a generally supported medium default was not verified. The local offload helper uses the same top-level field, but accepting an option in a client does not establish provider/model support.
 
 The HTTP diagnostic now indicates when a structured provider error mentions `reasoning_effort`. It never prints arbitrary error text, raw bodies or headers. A 400 by itself does not prove the effort setting was the cause. No automatic retry or silent parameter substitution is performed. Documentation: https://docs-ng.cerit.io/en/docs/ai-as-a-service/ai-api#reasoning-models-in-the-api
+
+## Configuration-first entry scripts
+
+`netcdf_example.R`, `inventory_sim.R` and `start_here.R` now place all user settings immediately below their source statements. Edit paths and options there, then run the script; there are no file pickers, directory prompts or automatic viewer popups. Public copies leave paths blank. Do not commit private local settings. This supersedes the earlier file-picker/readline instructions.
+
+Remote reviews default to `send_to_api = FALSE`. Inspect the printed/saved preview before explicitly enabling API submission; the selected setting constitutes approval of that run's payload. The hidden API-key prompt is the only interactive input, and the key stays in memory. The scripts can be sourced as a whole in an interactive RStudio session; unattended key provisioning and multi-file execution are not configured by these entry scripts. `reasoning_effort = NULL` leaves the API's configured default in control.
