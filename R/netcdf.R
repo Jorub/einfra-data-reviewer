@@ -53,9 +53,9 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v2", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v3", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
-    provenance = "Unclear source or temporal meaning is a failure requiring human review; native-frequency source data need not have a local aggregation step",
+    provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
     temporal_values = "Values must have the quantity, units and temporal interpretation represented by the filename frequency; metadata/history or source documentation must explain that interpretation",
     project_grid_degrees = 0.25,
@@ -86,7 +86,12 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     x <- ncdf4::ncatt_get(n, v, a)
     if (isTRUE(x$hasatt)) x$value else default
   }
-  history <- if (include_history) att(0, "history") else NULL
+  stored_history <- att(0, "history")
+  history_present <- !is.null(stored_history) && any(!is.na(stored_history) & nzchar(trimws(as.character(stored_history))))
+  add("history_provenance", history_present,
+    if (history_present) "Nonempty NetCDF history attribute present; adequacy still requires review" else
+      "PROVENANCE: NetCDF history attribute is missing or empty; mandatory provenance requirement failed")
+  history <- if (include_history && history_present) stored_history else NULL
   provenance <- list()
   for (a in c("source", "references", "institution", "title", "comment")) {
     x <- att(0, a)
@@ -94,7 +99,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   }
   evidence$source_metadata <- provenance
   evidence$provenance_notes <- sanitize_history(provenance_notes, 2000L)$text
-  evidence$processing_history <- if (is.null(history)) list(available = FALSE) else
+  evidence$processing_history <- if (is.null(history)) list(available = FALSE, present_in_file = history_present, included_in_payload = FALSE) else
     c(list(available = TRUE), sanitize_history(history))
   find_dim <- function(kind) {
     hit <- names(n$dim)[vapply(n$dim, function(d) {

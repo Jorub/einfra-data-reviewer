@@ -96,6 +96,7 @@ make_domain <- function(scale, latitude, missing = FALSE) {
   if (missing) vals[seq_len(floor(length(vals) * 2 / 3))] <- NA
   ncvar_put(n, v, vals)
   ncatt_put(n, 0, "source", "Synthetic documented test product")
+  ncatt_put(n, 0, "history", "Synthetic fixture construction; native monthly values, no temporal aggregation")
   ncatt_put(n, "t2m", "cell_methods", "time: mean")
   nc_close(n)
   check_netcdf(f, use_system_tools = FALSE)
@@ -119,3 +120,20 @@ p <- prepare_review(x)
 stopifnot(!any(x$status == "FAIL"), grepl("raw does not mean untouched downloads", p, fixed = TRUE),
           grepl("Do not invent a local temporal aggregation requirement", p, fixed = TRUE))
 cat("Project raw-stage, native-frequency source and fixed-grid convention tests passed.\n")
+
+# Missing history remains a deterministic provenance FAIL despite other notes.
+d <- tempfile(); dir.create(d)
+f <- file.path(d, "synthetic_t2m_degC_region_200001_200112_025_monthly.nc")
+make_fixture(f, history = NULL)
+x <- check_netcdf(f, use_system_tools = FALSE, provenance_notes = "Documented synthetic native monthly source")
+stopifnot(x$status[x$check == "history_provenance"] == "FAIL")
+n <- nc_open(f, write = TRUE); ncatt_put(n, 0, "history", "   "); nc_close(n)
+x <- check_netcdf(f, use_system_tools = FALSE)
+stopifnot(x$status[x$check == "history_provenance"] == "FAIL")
+n <- nc_open(f, write = TRUE); ncatt_put(n, 0, "history", "Documented native monthly source"); nc_close(n)
+x <- check_netcdf(f, use_system_tools = FALSE, include_history = FALSE)
+stopifnot(x$status[x$check == "history_provenance"] == "PASS",
+          attr(x, "review_evidence")$processing_history$present_in_file,
+          !attr(x, "review_evidence")$processing_history$available)
+unlink(d, recursive = TRUE)
+cat("Mandatory history tests passed: missing/empty histories fail, external notes cannot override, withheld history remains distinguishable from absent history.\n")
