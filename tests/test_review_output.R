@@ -67,3 +67,22 @@ cat("Optional reasoning field and whitelisted HTTP diagnostic tests passed.\n")
 clean <- checks; clean$status <- "PASS"
 attr(clean, "review_evidence")$blocking_gaps <- "time_coverage"
 stopifnot(review_summary(clean, "COMPLETED", list(verdict = "PASS", reason = "No issue", report_markdown = "Test"))$result == "INCOMPLETE")
+# A valid metadata-heavy review exceeding the old 16k guard may proceed, but
+# the new configurable guard still rejects oversized input before any API call.
+large <- checks
+large$detail <- paste(rep("diagnostic", 2200), collapse = " ")
+preview <- prepare_review(large)
+stopifnot(nchar(preview, type = "bytes") > 16000, nchar(preview, type = "bytes") < 64000)
+called <- 0
+api_request <- function(...) {
+  called <<- called + 1
+  list(model = "mock", choices = list(list(finish_reason = "stop", message = list(content =
+    jsonlite::toJSON(list(verdict = "FAIL", reason = "Synthetic failure", report_markdown = "Synthetic report"), auto_unbox = TRUE)))))
+}
+out <- tempfile(); dir.create(out)
+run <- review_checks(large, "mock", preview, send = TRUE, report_dir = out)
+stopifnot(called == 1, jsonlite::read_json(file.path(run, "metadata.json"))$input_bytes > 16000)
+stopifnot(inherits(try(review_checks(large, "mock", preview, send = TRUE, report_dir = out,
+  max_input_bytes = 16000), silent = TRUE), "try-error"), called == 1)
+unlink(out, recursive = TRUE)
+cat("Larger payload and configurable preflight-limit tests passed.\n")

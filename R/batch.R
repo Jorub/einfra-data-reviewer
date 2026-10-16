@@ -2,7 +2,7 @@
 # No automatic retries: record failure, checkpoint index, continue.
 run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
                                max_tokens = 8192L, reasoning_effort = NULL,
-                               send_to_api = FALSE) {
+                               send_to_api = FALSE, max_input_bytes = 64000L) {
   if(!is.list(file_specs)||!length(file_specs)) stop("Supply a nonempty list of file specifications.")
   if(!is.character(output_dir)||length(output_dir)!=1||is.na(output_dir)||!nzchar(output_dir)) stop("Set output_dir.")
   if(!dir.exists(output_dir)&&!dir.create(output_dir,recursive = TRUE)) stop("Cannot create output_dir.")
@@ -63,7 +63,8 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
     }
     failure <- NULL
     run <- tryCatch(review_checks(checks,model = model,approved_payload = preview,send = TRUE,
-      report_dir = local_dir,max_tokens = max_tokens,reasoning_effort = reasoning_effort),
+      report_dir = local_dir,max_tokens = max_tokens,reasoning_effort = reasoning_effort,
+      max_input_bytes = max_input_bytes),
       error = function(e) { failure <<- conditionMessage(e);NULL })
     if(!is.null(run)) {
       row <- read.csv(file.path(run,"review_index.csv"),stringsAsFactors = FALSE)

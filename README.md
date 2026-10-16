@@ -91,7 +91,7 @@ PASS means no issue identified within the performed checks, not scientific certi
 
 Use your own key through `set_api_key()`; `list_models()` checks authentication and availability. The key is held in memory, not written to code, prompts, metadata or reports. Sourcing `R/reviewer.R` again resets that environment; restarting R also requires re-entry. Workspace/history saving is disabled in the project. Do not manually save an authenticated R workspace. Other code under the same account can inspect memory: this is not a credential vault.
 
-`reasoning_effort = NULL` omits the field and uses the provider's configured default; it does not disable reasoning. Medium was rejected for thinker in our live pilot. Explicit low/medium/high settings remain model-dependent and should only be used after verification. Completion budgets include internal reasoning where applicable. Default max_tokens is 8192; summaries have a 16 kB request guard. Invalid/truncated responses remain incomplete. HTTP diagnostics whitelist categories, never arbitrary provider bodies/headers. No automatic retries or silent parameter substitutions.
+`reasoning_effort = NULL` omits the field and uses the provider's configured default; it does not disable reasoning. Medium was rejected for thinker in our live pilot. Explicit low/medium/high settings remain model-dependent and should only be used after verification. Completion budgets include internal reasoning where applicable. Default max_tokens is 8192; review summaries have a configurable 64 kB request guard (`max_input_bytes`); this is a byte limit, not a token/context measurement. Invalid/truncated responses remain incomplete. HTTP diagnostics whitelist categories, never arbitrary provider bodies/headers. No automatic retries or silent parameter substitutions.
 
 ## Direct LLM text example
 
@@ -118,3 +118,7 @@ Only generic code, instructions and synthetic tests belong here. Keep data and r
 
 Service documentation: https://docs-ng.cerit.io/en/docs/ai-as-a-service/ai-api
 CF calendars: https://cran.r-project.org/package=CFtime
+
+### Larger filename/family review payloads
+
+The original 16 kB client limit was too small for some metadata/history payloads. NetCDF reviewer and batch defaults now use `max_input_bytes = 64000L`, also exposed in the entry scripts. No evidence is silently removed to fit. Rejected requests report actual/configured bytes before any API call. Input size is recorded in successful request metadata. Inspect a large preview and respect the chosen model's actual context limit before increasing this guard further. This input setting is separate from `max_tokens`, the completion/reasoning budget.

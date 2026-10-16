@@ -144,7 +144,8 @@ review_summary <- function(checks, llm_status, parsed = NULL) {
   data.frame(filename = f,result = status,reason = paste(reasons,collapse = "; "),stringsAsFactors = FALSE)
 }
 review_checks <- function(checks, model, approved_payload, send = FALSE,
-                          report_dir, max_tokens = 8192L, reasoning_effort = NULL) {
+                          report_dir, max_tokens = 8192L, reasoning_effort = NULL,
+                          max_input_bytes = 64000L) {
   if(!is.null(reasoning_effort) && (length(reasoning_effort)!=1 || is.na(reasoning_effort) ||
      !reasoning_effort %in% c("low","medium","high")))
     stop("reasoning_effort must be NULL, low, medium or high.")
@@ -152,7 +153,12 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   if (!isTRUE(send)) stop("Preview prepare_review(checks), then explicitly set send = TRUE.")
   if (!identical(as.character(approved_payload), payload)) stop("Checks changed since preview; preview again.")
   if (length(model) != 1 || !nzchar(model)) stop("Choose a model from list_models().")
-  if (nchar(payload, type = "bytes") > 16000) stop("Summary too large; split the review.")
+  input_bytes <- nchar(payload, type = "bytes")
+  if (length(max_input_bytes) != 1 || !is.numeric(max_input_bytes) ||
+      !is.finite(max_input_bytes) || max_input_bytes < 1) stop("max_input_bytes must be a positive byte limit.")
+  if (input_bytes > max_input_bytes) stop("Review payload is ", input_bytes,
+    " bytes, exceeding max_input_bytes = ", max_input_bytes,
+    ". Increase the configured limit after inspecting the preview; nothing was sent.")
   if (length(max_tokens) != 1 || is.na(max_tokens) || max_tokens < 256 || max_tokens > 8192) stop("Invalid output budget.")
   if (missing(report_dir) || length(report_dir) != 1 || !nzchar(report_dir)) stop("Choose an explicit local report directory.")
   if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE, showWarnings = FALSE)) stop("Cannot create report directory.")
@@ -163,7 +169,8 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   saveRDS(checks,file.path(run,"local-diagnostics.rds"))
   # Create a conservative checkpoint before contacting the API.
   write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names = FALSE)
-  metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,finish_reason = NULL,usage = NULL,
+  metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
+    input_bytes = input_bytes,max_input_bytes = max_input_bytes,finish_reason = NULL,usage = NULL,
     complete = FALSE,llm_status = "NOT_COMPLETED",deterministic_failures = sum(checks$status=="FAIL"),
     deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v4-families",
     time_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))

@@ -16,6 +16,7 @@ include_history <- TRUE
 model <- "thinker"
 reasoning_effort <- NULL             # omit field; use API/model default
 max_tokens <- 8192L
+max_input_bytes <- 64000L            # local payload guard; bytes, not tokens
 send_to_api <- FALSE                 # explicit approval after inspecting preview
 
 # Validate settings ==========================================================
@@ -47,7 +48,7 @@ if (send_to_api) {
   run <- review_checks(
     checks, model = model, approved_payload = preview, send = TRUE,
     report_dir = report_dir, max_tokens = max_tokens,
-    reasoning_effort = reasoning_effort
+    reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes
   )
   print(read.csv(file.path(run, "summary.csv")), row.names = FALSE)
 }
