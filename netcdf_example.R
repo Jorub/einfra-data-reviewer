@@ -25,6 +25,7 @@ cat(preview)
 # print(list_models())
 # report_dir <- readline("Local report directory: ")
 # saveRDS(checks, file.path(report_dir, "netcdf-local-diagnostics.rds"))
-# review_checks(checks, model = "thinker", approved_payload = preview,
-#               send = TRUE, report_dir = report_dir, max_tokens = 4096L)
+# run <- review_checks(checks, model = "thinker", approved_payload = preview,
+#               send = TRUE, report_dir = report_dir, max_tokens = 8192L)
+# read.csv(file.path(run, "summary.csv")) # capture run <- review_checks(...) above
 # clear_api_key()

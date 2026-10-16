@@ -79,52 +79,101 @@ prepare_review <- function(checks) {
     "Use simple numerical sanity checks to assess proposed offsets or scale errors; label counterfactual calculations as diagnostics, not approved corrections.",
     "Propose likely causes when supported; do not invent missing processing steps, claim proof from filenames, or hide behind uncertainty about plainly implausible values.",
     "A PASS only covers its stated check. NOT_CHECKED is a coverage gap, not evidence that data are wrong. Do not imply untested variables or cells were inspected.",
-    "Return concise Markdown, at most 600 words, in this structure:",
-    "Triage: FLAG, NO_ISSUE_IDENTIFIED, or INSUFFICIENT_EVIDENCE. This is advisory, never a certification.",
+    "Compare the supplied filename and its parsed claims against observed metadata and diagnostics. Filenames are evidence, not authority; do not compare end dates across different frequency products.",
+    "Return ONLY a JSON object with exactly three string fields: verdict, reason, report_markdown. No code fences or surrounding text.",
+    "verdict must be FAIL for an identified error or a flagged coverage limitation, PASS if no issue is identified within available evidence, or INCOMPLETE if evidence is insufficient for a meaningful assessment. PASS is advisory, not a certification.",
+    "reason must be one short sentence (maximum 300 characters) suitable for a CSV summary. Include the most important specific finding; do not repeat the filename.",
+    "report_markdown must contain the following detailed report, at most 600 words:",
     "Priority findings: for each, severity HIGH/MEDIUM/LOW, confidence CONFIRMED_IN_SUPPLIED_EVIDENCE/STRONGLY_SUPPORTED/HYPOTHESIS, specific evidence, and likely impact.",
     "Next actions: a short prioritized repair/investigation list, with a discriminating verification for each likely cause. Do not recommend overwriting originals or automatic repairs.",
     "Coverage gaps: only material checks still missing. If no issue is identified, say what evidence was actually reviewed. No executable commands."
   )
   # Only explicit evidence is transmitted; raw local tool outputs stay local.
-  jsonlite::toJSON(list(prompt_version = "scientific-triage-v2", task = task,
+  jsonlite::toJSON(list(prompt_version = "scientific-triage-v3-json", task = task,
     passed_checks = list(count = length(passed), names = passed),
     attention_checks = attention, context = attr(checks, "review_evidence")),
     dataframe = "rows", auto_unbox = TRUE, null = "null", pretty = TRUE)
 }
 
+parse_review_response <- function(text) {
+  result <- tryCatch(jsonlite::fromJSON(text,simplifyVector=FALSE),error=function(e) NULL)
+  required <- c("verdict","reason","report_markdown")
+  if(!is.list(result) || length(result)!=3 || !setequal(names(result),required)) return(NULL)
+  if(!all(vapply(result,function(x) is.character(x)&&length(x)==1&&!is.na(x)&&nzchar(trimws(x)),logical(1)))) return(NULL)
+  if(!result$verdict %in% c("PASS","FAIL","INCOMPLETE") || nchar(result$reason)>300) return(NULL)
+  result
+}
+review_summary <- function(checks, llm_status, parsed = NULL) {
+  f <- attr(checks,"review_evidence")$filename$basename
+  if(is.null(f)) f <- "unspecified"
+  failed <- checks[checks$status %in% c("FAIL","WARN"),,drop=FALSE]
+  # Deterministic flags survive any API outcome or mistaken model PASS.
+  status <- if(nrow(failed)) "FAIL" else if(!identical(llm_status,"COMPLETED")) "INCOMPLETE" else parsed$verdict
+  reasons <- if(!is.null(parsed) && parsed$verdict=="FAIL") parsed$reason else
+    if(nrow(failed)) paste(paste0(head(failed$check,2),": ",head(failed$detail,2)),collapse="; ") else
+    if(!is.null(parsed)) parsed$reason else character()
+  if(nrow(failed)>2 && (is.null(parsed) || parsed$verdict!="FAIL"))
+    reasons <- c(reasons,paste(nrow(failed)-2,"additional deterministic flags; see detailed checks"))
+  if(llm_status!="COMPLETED") reasons <- c(reasons,paste("LLM review",llm_status))
+  data.frame(filename=f,result=status,reason=paste(reasons,collapse="; "),stringsAsFactors=FALSE)
+}
 review_checks <- function(checks, model, approved_payload, send = FALSE,
-                          report_dir, max_tokens = 2048L) {
+                          report_dir, max_tokens = 8192L) {
   payload <- as.character(prepare_review(checks))
   if (!isTRUE(send)) stop("Preview prepare_review(checks), then explicitly set send = TRUE.")
   if (!identical(as.character(approved_payload), payload)) stop("Checks changed since preview; preview again.")
   if (length(model) != 1 || !nzchar(model)) stop("Choose a model from list_models().")
   if (nchar(payload, type = "bytes") > 16000) stop("Summary too large; split the review.")
   if (length(max_tokens) != 1 || is.na(max_tokens) || max_tokens < 256 || max_tokens > 8192) stop("Invalid output budget.")
-  if (missing(report_dir) || length(report_dir) != 1 || !nzchar(report_dir))
-    stop("Choose an explicit local report directory.")
-  if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE, showWarnings = FALSE))
-    stop("Cannot create report directory.")
+  if (missing(report_dir) || length(report_dir) != 1 || !nzchar(report_dir)) stop("Choose an explicit local report directory.")
+  if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE, showWarnings = FALSE)) stop("Cannot create report directory.")
   run <- tempfile("review-", tmpdir = report_dir)
-  dir.create(run)
+  if(!dir.create(run)) stop("Cannot create run directory.")
   writeLines(payload, file.path(run, "submitted-summary.json"))
   write.csv(checks, file.path(run, "checks.csv"), row.names = FALSE)
-  result <- tryCatch(api_request("/chat/completions", list(model = model,
-    messages = list(list(role = "user", content = payload)), max_tokens = max_tokens,
-    stream = FALSE)), error = function(e) {
-      writeLines("LLM review incomplete: API request failed. Deterministic checks remain authoritative.",
-        file.path(run, "INCOMPLETE.txt")); stop(conditionMessage(e), call. = FALSE)
+  saveRDS(checks,file.path(run,"local-diagnostics.rds"))
+  # Create a conservative checkpoint before contacting the API.
+  write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names=FALSE)
+  metadata <- list(requested_model=model,returned_model=NULL,finish_reason=NULL,usage=NULL,
+    complete=FALSE,llm_status="NOT_COMPLETED",deterministic_failures=sum(checks$status=="FAIL"),
+    deterministic_warnings=sum(checks$status=="WARN"),prompt_version="scientific-triage-v3-json",
+    time_utc=format(Sys.time(),tz="UTC",usetz=TRUE))
+  save_status <- function(status,parsed=NULL) {
+    metadata$llm_status <- status
+    metadata$complete <- identical(status,"COMPLETED")
+    jsonlite::write_json(metadata,file.path(run,"metadata.json"),auto_unbox=TRUE,pretty=TRUE,null="null")
+    summary <- review_summary(checks,status,parsed)
+    write.csv(summary,file.path(run,"summary.csv"),row.names=FALSE)
+    index <- cbind(summary,variable=if(is.null(attr(checks,"review_evidence")$observed$variable)) "unspecified" else
+      attr(checks,"review_evidence")$observed$variable,checks_status="COMPLETED",llm_status=status,report_path=run)
+    write.csv(index,file.path(run,"review_index.csv"),row.names=FALSE)
+    invisible(NULL)
+  }
+  save_status("NOT_COMPLETED")
+  result <- tryCatch(api_request("/chat/completions",list(model=model,
+    messages=list(list(role="user",content=payload)),max_tokens=max_tokens,stream=FALSE)),
+    error=function(e) {
+      save_status("API_ERROR")
+      writeLines("API review failed; deterministic results retained.",file.path(run,"INCOMPLETE.txt"))
+      stop("API review failed. Report: ",run,". ",conditionMessage(e),call.=FALSE)
     })
-  choice <- result$choices[[1]]
+  choice <- if(is.list(result$choices)&&length(result$choices)) result$choices[[1]] else NULL
   text <- choice$message$content
-  complete <- identical(choice$finish_reason, "stop") && is.character(text) && length(text) == 1 && nzchar(trimws(text))
-  metadata <- list(requested_model = model, returned_model = result$model,
-    finish_reason = choice$finish_reason, usage = result$usage, complete = complete,
-    deterministic_failures = sum(checks$status == "FAIL"), time_utc = format(Sys.time(), tz = "UTC"))
-  jsonlite::write_json(metadata, file.path(run, "metadata.json"), auto_unbox = TRUE, pretty = TRUE)
-  # Save only chosen content/usage; never raw HTTP headers or full API responses.
-  if (is.character(text)) writeLines(text, file.path(run, if (complete) "review.md" else "review.partial.md"))
-  if (!complete) stop("Incomplete model response; inspect local metadata. Do not treat as completed review.")
-  message("Review saved to ", run, "; deterministic failures: ", metadata$deterministic_failures)
+  metadata$returned_model <- result$model
+  metadata$finish_reason <- choice$finish_reason
+  metadata$usage <- result$usage
+  content_ok <- is.character(text)&&length(text)==1&&!is.na(text)&&nzchar(trimws(text))
+  if(content_ok) writeLines(text,file.path(run,"review-response.json"))
+  parsed <- if(content_ok && identical(choice$finish_reason,"stop")) parse_review_response(text) else NULL
+  if(is.null(parsed)) {
+    status <- if(identical(choice$finish_reason,"length")) "TOKEN_LIMIT" else
+      if(!content_ok) "EMPTY_RESPONSE" else "INVALID_RESPONSE"
+    save_status(status)
+    stop("Incomplete model response (",status,"). Inspect metadata.json and summary.csv in ",run,call.=FALSE)
+  }
+  writeLines(parsed$report_markdown,file.path(run,"review.md"))
+  save_status("COMPLETED",parsed)
+  message("Review saved to ",run,"; result: ",review_summary(checks,"COMPLETED",parsed)$result)
   invisible(run)
 }
 

@@ -1,3 +1,20 @@
+# Filename claims are evidence to verify, not a substitute for file contents.
+parse_netcdf_filename <- function(path) {
+  name <- basename(path)
+  fields <- strsplit(sub("\\.(nc|nc4|cdf)$", "", name, ignore.case = TRUE), "_", fixed = TRUE)[[1]]
+  issues <- character()
+  if (length(fields) != 8 || any(!nzchar(fields)))
+    return(list(basename=name, valid=FALSE, issues="Expected eight nonempty underscore-separated fields"))
+  names(fields) <- c("source","variable","units","spatial_coverage","start","end","spatial_resolution","frequency")
+  date_ok <- function(x) grepl("^[0-9]{6}$",x) && substr(x,5,6) %in% sprintf("%02d",1:12) && substr(x,1,4)!="0000"
+  if (!date_ok(fields['start'])) issues <- c(issues,"Malformed start date; expected YYYYMM")
+  if (!date_ok(fields['end'])) issues <- c(issues,"Malformed end date; expected YYYYMM")
+  if (!length(issues) && fields['start']>fields['end']) issues <- c(issues,"Start date is later than end date")
+  if (!fields['frequency'] %in% c("hourly","daily","monthly","yearly","annual")) issues <- c(issues,"Unrecognized temporal frequency")
+  list(basename=name, valid=!length(issues), fields=as.list(fields), issues=issues,
+       note="Filename fields are claims, not verified metadata. Resolution code 025 means 0.25 degrees; other codes require an agreed mapping.")
+}
+
 # Reduce disclosure from free-text history; review the preview before submission.
 sanitize_history <- function(text, max_chars = 6000L) {
   text <- paste(as.character(text), collapse = "\n")
@@ -49,7 +66,9 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
   }
   dims <- c(lon = find_dim("lon"), lat = find_dim("lat"), time = find_dim("time"))
   add("coordinate_dimensions", !anyNA(dims), "Requires uniquely identifiable longitude, latitude and time dimensions")
-  evidence <- list(contract = list(variable = variable, units = expected_units,
+  filename <- parse_netcdf_filename(path)
+  add("filename_format", filename$valid, if(filename$valid) "Eight fields and valid YYYYMM dates" else paste(filename$issues,collapse="; "))
+  evidence <- list(filename = filename, contract = list(variable = variable, units = expected_units,
     resolution_degrees = resolution, first_month = start_month, last_month = end_month,
     records = length(expected_months), global_grid = global_grid),
     limits = c("Land-mask correctness requires a reference mask; not checked.",
@@ -83,6 +102,25 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
   normalized <- gsub("[ _°-]", "", tolower(as.character(units)))
   add("temperature_units", normalized %in% c("degc", "degreecelsius", "degreescelsius", "celsius", "degreec", "degreesc"),
       paste("Expected Celsius; stored units:", substr(units, 1, 120)))
+  if (isTRUE(filename$valid)) {
+    f <- filename$fields
+    same_units <- function(x) {
+      z <- gsub("[ _°-]", "", tolower(x))
+      if(z %in% c("degc","degreecelsius","degreescelsius","celsius","degreec","degreesc")) "degc" else z
+    }
+    add("filename_units", identical(same_units(f$units),same_units(as.character(units))),
+        paste("Filename units:",f$units,"; stored units:",units))
+    add("filename_expected_period", identical(paste0(substr(f$start,1,4),"-",substr(f$start,5,6)),start_month) &&
+        identical(paste0(substr(f$end,1,4),"-",substr(f$end,5,6)),end_month),
+        "Filename dates compared with the caller's explicit monthly contract")
+    add("filename_frequency", if(f$frequency=="monthly") "PASS" else "NOT_CHECKED",
+        "This pilot validates monthly data only; other frequencies need their own checker")
+    if(f$spatial_resolution=="025") add("filename_resolution",abs(resolution-.25)<1e-8,
+      "Filename 025 compared with the caller's explicit resolution")
+    else add("filename_resolution","NOT_CHECKED","Resolution code needs an agreed mapping")
+    add("filename_variable", identical(f$variable,variable),
+      paste("Filename variable:",f$variable,"; selected variable:",variable,"; aliases require explicit review"))
+  }
   evidence$observed <- list(variable = variable, units = substr(units, 1, 120),
     dimensions = as.list(setNames(dl, dn)),
     scale_factor = getatt(variable, "scale_factor", 1),
@@ -146,6 +184,22 @@ check_netcdf <- function(path, variable = NULL, expected_units = "degC",
     evidence$observed$time$last <- as.character(tail(dates,1))
     evidence$observed$time$missing_months <- head(missing,12)
     evidence$observed$time$unexpected_months <- head(unexpected,12)
+    if (isTRUE(filename$valid) && filename$fields$frequency=="monthly") {
+      actual_start <- format(min(dates),"%Y%m"); actual_end <- format(max(dates),"%Y%m")
+      add("filename_actual_period", identical(filename$fields$start,actual_start) && identical(filename$fields$end,actual_end),
+          paste("Actual monthly endpoints:",actual_start,"to",actual_end))
+    }
+    years <- sort(unique(substr(months,1,4)))
+    incomplete <- lapply(years,function(y) {
+      missing <- setdiff(paste0(y,"-",sprintf("%02d",1:12)),months)
+      if(length(missing)) data.frame(year=y,missing_months=paste(missing,collapse=", ")) else NULL
+    })
+    incomplete <- do.call(rbind,incomplete)
+    add("complete_years", if(is.null(incomplete)) "PASS" else "WARN",
+        if(is.null(incomplete)) "All represented years contain all 12 months" else
+          paste(nrow(incomplete),"incomplete years including boundary years; coverage limitation requires human review"))
+    evidence$observed$time$incomplete_years <- if(is.null(incomplete)) list() else head(incomplete,12)
+    evidence$observed$time$incomplete_year_details_truncated <- !is.null(incomplete) && nrow(incomplete)>12
   }
   add("land_mask", "NOT_CHECKED", "No independent reference land mask supplied")
   add("monthly_mean_semantics", "NOT_CHECKED", "Monthly timestamps do not establish that values are monthly means")

@@ -16,7 +16,8 @@ make_fixture <- function(path, units="degC", missing_month=FALSE, duplicate_mont
   ncvar_put(n,def,values);nc_close(n)
 }
 run <- function(...) {
- f <- tempfile(fileext=".nc");on.exit(unlink(f));make_fixture(f,...)
+ d <- tempfile(); dir.create(d); on.exit(unlink(d,recursive=TRUE))
+ f <- file.path(d,"synthetic_t2m_degC_land_200001_200112_090_monthly.nc");make_fixture(f,...)
  before <- tools::md5sum(f)
  x <- check_netcdf(f,resolution=90,start_month="2000-01",end_month="2001-12",use_system_tools=FALSE)
  stopifnot(identical(before,tools::md5sum(f)))
@@ -26,7 +27,9 @@ run <- function(...) {
 x <- run(); stopifnot(!any(x$status=="FAIL"))
 stopifnot(attr(x,"review_evidence")$value_scan$slices==24)
 x <- run(units="K");stopifnot(x$status[x$check=="temperature_units"]=="FAIL")
-x <- run(missing_month=TRUE);stopifnot(x$status[x$check=="monthly_time_axis"]=="FAIL")
+x <- run(missing_month=TRUE);stopifnot(x$status[x$check=="monthly_time_axis"]=="FAIL",
+  x$status[x$check=="complete_years"]=="WARN",
+  grepl("2000-05",attr(x,"review_evidence")$observed$time$incomplete_years$missing_months[1],fixed=TRUE))
 x <- run(duplicate_month=TRUE);stopifnot(x$status[x$check=="monthly_time_axis"]=="FAIL")
 x <- run(spacing=80);stopifnot(x$status[x$check=="lon_resolution"]=="FAIL")
 x <- run(calendar="360_day");stopifnot(x$status[x$check=="monthly_time_axis"]=="NOT_CHECKED")
