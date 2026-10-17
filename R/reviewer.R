@@ -96,6 +96,9 @@ prepare_review <- function(checks) {
     "Use simple numerical sanity checks to assess proposed offsets or scale errors; label counterfactual calculations as diagnostics, not approved corrections.",
     "Propose likely causes when supported; do not invent missing processing steps, claim proof from filenames, or hide behind uncertainty about plainly implausible values.",
     "Project conventions: raw files have already been preprocessed to common units and a 0.25-degree grid; raw does not mean untouched downloads. Processed files generally contain time/spatial subsets. All project grids must be 0.25 degrees.",
+    "Project masking convention: applying a spatial mask can leave real environmental values under the variable name mask. A retained mask name or missing units is a NAMING/METADATA failure; do not infer binary mask contents or destroyed values from the name alone. Assess the numerical summaries separately. Missing dates remain a separate temporal issue.",
+    "If filename validation stops inspection before metadata are read, do not infer that history or source metadata are absent from the actual file; identify naming failure and uninspected evidence separately.",
+    "Prefix each short reason with a category such as NAMING/METADATA, UNITS/VALUES, TEMPORAL, SPATIAL or PROVENANCE, followed by the concrete finding. Avoid repeating the word FAIL.",
     "A source may already be monthly, daily or annual. Do not invent a local temporal aggregation requirement or call the absence of an aggregation command an error. Establish the final values temporal meaning from source documentation and/or preprocessing evidence. A metadata-only unit edit does not prove a conversion was needed or omitted.",
     "Required provenance: identify the source and establish the meaning of values at the filename frequency using supplied metadata, history or notes. If that is missing or ambiguous, report a provenance FAIL with the exact unresolved question. A missing or empty NetCDF history attribute is explicitly a mandatory provenance FAIL even when other metadata or external notes are supplied. Existing history does not automatically prove adequate source or temporal provenance.",
     "Monthly data may validly end in August or another declared month: do not flag an incomplete boundary year for monthly, daily or hourly products. Annual partial-year products require a flag. Missing records inside the declared interval are always a problem.",
@@ -112,7 +115,7 @@ prepare_review <- function(checks) {
     "Coverage gaps: only material checks still missing. If no issue is identified, say what evidence was actually reviewed. No executable commands."
   )
   # Only explicit evidence is transmitted; raw local tool outputs stay local.
-  jsonlite::toJSON(list(prompt_version = "scientific-triage-v6-required-history", task = task,
+  jsonlite::toJSON(list(prompt_version = "scientific-triage-v7-mask-convention", task = task,
     passed_checks = list(count = length(passed), names = passed),
     attention_checks = attention, context = attr(checks, "review_evidence")),
     dataframe = "rows", auto_unbox = TRUE, null = "null", pretty = TRUE)
@@ -161,7 +164,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   if (input_bytes > max_input_bytes) stop("Review payload is ", input_bytes,
     " bytes, exceeding max_input_bytes = ", max_input_bytes,
     ". Increase the configured limit after inspecting the preview; nothing was sent.")
-  if (length(max_tokens) != 1 || is.na(max_tokens) || max_tokens < 256 || max_tokens > 8192) stop("Invalid output budget.")
+  if (length(max_tokens) != 1 || is.na(max_tokens) || max_tokens < 256 || max_tokens > 65536) stop("Completion budget must be 256–65536 tokens and supported by the selected model.")
   if (missing(report_dir) || length(report_dir) != 1 || !nzchar(report_dir)) stop("Choose an explicit local report directory.")
   if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE, showWarnings = FALSE)) stop("Cannot create report directory.")
   run <- tempfile("review-", tmpdir = report_dir)
@@ -172,9 +175,9 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   # Create a conservative checkpoint before contacting the API.
   write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names = FALSE)
   metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
-    input_bytes = input_bytes,max_input_bytes = max_input_bytes,finish_reason = NULL,usage = NULL,
+    input_bytes = input_bytes,max_input_bytes = max_input_bytes,max_tokens = max_tokens,finish_reason = NULL,usage = NULL,
     complete = FALSE,llm_status = "NOT_COMPLETED",deterministic_failures = sum(checks$status=="FAIL"),
-    deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v6-required-history",
+    deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v7-mask-convention",
     time_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
   save_status <- function(status,parsed = NULL) {
     metadata$llm_status <- status

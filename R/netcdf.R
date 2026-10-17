@@ -53,12 +53,13 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v3", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v4", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
     provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
     temporal_values = "Values must have the quantity, units and temporal interpretation represented by the filename frequency; metadata/history or source documentation must explain that interpretation",
     project_grid_degrees = 0.25,
+    masking = "Masking may retain actual environmental values under variable name mask. Restore intended variable name/units; do not infer binary contents from the name alone",
     temporal = "Monthly/daily/hourly boundary years may end as declared; annual products require complete years"))
   finish <- function() {
     x <- do.call(rbind, rows)
@@ -126,7 +127,10 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   if (length(remaining)) add("additional_data_variables", "NOT_CHECKED",
     paste("Other data variables not scanned in this filename-variable review:", paste(remaining, collapse = ", ")))
   add("filename_variable", if (identical(variable, f$variable)) "PASS" else "WARN",
-    paste("Filename claims", f$variable, "; selected variable", variable, "; differing aliases require confirmation"))
+    if (identical(variable, "mask") && f$variable != "mask")
+      paste("NAMING/METADATA: masking left variable named mask instead of", f$variable,
+        "; restore intended name and verify units; name alone does not imply binary values") else
+      paste("Filename claims", f$variable, "; selected variable", variable, "; differing aliases require confirmation"))
   v <- n$var[[variable]]
   dn <- vapply(v$dim, function(d) d$name, character(1)); dl <- vapply(v$dim, function(d) d$len, numeric(1))
   extra_ok <- all(dl[!dn %in% dims] == 1)

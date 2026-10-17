@@ -11,11 +11,12 @@ All entry scripts put user settings immediately below their source statements. S
 - `netcdf_example.R`: one file; inspect checks/preview, then optionally submit.
 - `three_file_example.R`: selected files, processed sequentially; a file error does not stop the next.
 - `temperature_folder_example.R`: discover the whole temperature tree and review files sequentially.
+- `rerun_example.R`: retry incomplete LLM reviews from saved diagnostics, without rescanning data.
 - `inventory_sim.R`: local metadata inventory of a directory, no API calls or value scans.
 - `llm_example.R`: independent editable text prompt and Markdown response.
 - `start_here.R`: synthetic CSV example with deliberate errors.
 
-`send_to_api = FALSE` is the default. Inspect the preview before explicitly approving the selected payloads with TRUE. Sources load once; the three-file example asks for the key once before looping. It can clear the key after the batch. A full rerun rescans and creates a new report folder: retry-only/resume support is not implemented yet.
+`send_to_api = FALSE` is the default. Inspect the preview before explicitly approving the selected payloads with TRUE. Sources load once; the three-file example asks for the key once before looping. It can clear the key after the batch. A full rerun rescans and creates a new report folder: use `rerun_example.R` to retry only selected incomplete LLM stages from cached diagnostics. Full scan resume is not implemented.
 
 ## Filename-derived expectations
 
@@ -132,8 +133,22 @@ The original 16 kB client limit was too small for some metadata/history payloads
 
 Use `temperature_folder_example.R`. Set `root` to your temperature folder and `output_dir` to private persistent storage outside it. All settings are at the top. With `recursive = TRUE`, both raw and processed subfolders are included. The script discovers `.nc`, `.nc4` and `.cdf` files, excludes hidden/checkpoint entries and symlinks, prints a file list/total size and builds `file_specs` automatically with family `temperature`. Each filename supplies its own units, period, frequency and scale. No manual scientific expectations are repeated.
 
-Set `send_to_api = TRUE` to explicitly approve the discovered files' built-in review payloads (basename, selected metadata, diagnostics and redacted history). The key is requested once, calls run sequentially and per-file errors do not stop later files. A no-API run saves previews and checks, but clean files remain INCOMPLETE until LLM review. A full rerun repeats scans; resume is not yet implemented. The master index records private input paths locally so equal basenames in raw/processed folders remain distinguishable. The short summary remains only filename/result/reason. Do not publish these reports.
+Set `send_to_api = TRUE` to explicitly approve the discovered files' built-in review payloads (basename, selected metadata, diagnostics and redacted history). The key is requested once, calls run sequentially and per-file errors do not stop later files. A no-API run saves previews and checks, but clean files remain INCOMPLETE until LLM review. A full rerun repeats scans; `rerun_example.R` instead reuses saved diagnostics for selected incomplete LLM stages. Full scan resume is not yet implemented. The master index records private input paths locally so equal basenames in raw/processed folders remain distinguishable. The short summary remains only filename/result/reason. Do not publish these reports.
 
 After completion, `input-files.csv` and `excluded-entries.txt` are also saved in the batch folder. The running master index is saved before/after files, so requested inputs remain identifiable even if the process is interrupted. Large daily/hourly files require a complete value scan and can take considerably longer than monthly files; the script does not silently sample.
 
 Additional test: `Rscript tests/test_folder_batch.R` (mock scans, no API calls).
+
+## Retry token-limited reviews
+
+Open `rerun_example.R` and set `batch_dir` to the original batch folder containing `review_index.csv`, and `output_dir` to persistent private storage. Run from the same project working directory as the original scan so recorded relative report paths resolve. Set `send_to_api = TRUE` to approve submitting updated prompts built from the cached evidence. The key is requested once; files are retried sequentially and errors do not stop later files.
+
+The default selects `llm_status = TOKEN_LIMIT`, including files already marked FAIL by deterministic checks, and retries once with twice the original completion budget, capped by `max_retry_tokens = 16384L`. Set `same_budget_first = TRUE` for an additional attempt at the original budget before escalation. Escalation happens only after another TOKEN_LIMIT, not after API/schema errors or a completed response. To retry an API error too, explicitly include `"API_ERROR"` in `retry_statuses`.
+
+Older reports lack a recorded requested budget: for a length-limited response it is inferred from completion-token usage; otherwise `fallback_max_tokens` is used. The client accepts budgets up to 65536, but the selected model/provider must support the requested budget. A larger budget does not guarantee completion. If the original budget already reaches the configured cap, raise the cap to permit escalation.
+
+Each run creates a separate `rerun-*` folder containing an updated full index, short summary, flagged-files table and `attempts.csv`. The attempts table records original and retry budgets, their source, completion/reasoning/prompt tokens, finish reason, status and report path. Original reports remain unchanged. Saved `local-diagnostics.rds` evidence is reused with the current reviewer prompt; NetCDF files are never reopened. If data or checker logic changed, perform a fresh scan instead.
+
+The masking convention is explicit: actual environmental values can retain the variable name `mask` after masking. Flag the missing renaming/units restoration as NAMING/METADATA; the name alone does not prove values became a binary mask. Values and physical plausibility are assessed separately.
+
+Additional test: `Rscript tests/test_rerun.R` (mock responses, no API calls).
