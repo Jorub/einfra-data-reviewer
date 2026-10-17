@@ -137,3 +137,24 @@ stopifnot(x$status[x$check == "history_provenance"] == "PASS",
           !attr(x, "review_evidence")$processing_history$available)
 unlink(d, recursive = TRUE)
 cat("Mandatory history tests passed: missing/empty histories fail, external notes cannot override, withheld history remains distinguishable from absent history.\n")
+
+# Team-facing diagnostics: all dates locally, statistics and recorded conversions.
+x <- run_fixture(months = (1:24)[-5], history = "cdo -subc,273.15 input output; cdo -mulc,1e-3 input output")
+stopifnot(identical(attr(x, "local_period_details")$period, "2000-05"))
+d <- tempfile(); dir.create(d)
+write_diagnostic_tables(x, d)
+layer <- read.csv(file.path(d, "layer-statistics.csv"))
+summary <- read.csv(file.path(d, "file-summary.csv"))
+ops <- read.csv(file.path(d, "recorded-conversions.csv"))
+stopifnot(nrow(layer) == 23, abs(layer$mean[1] - mean(c(2, 5, 10, 15, 20, 25, 30))) < 1e-10,
+  layer$min[1] == 2, layer$max[1] == 30, !anyNA(layer$timestamp),
+  summary$n_layers == 23, summary$lon_first == 1, summary$lon_last == 1.75,
+  abs(summary$mean - layer$mean[1]) < 1e-10, summary$missing_period_count == 1,
+  identical(ops$operator, c("subc", "mulc")), identical(ops$constant, c(273.15, .001)))
+# API evidence remains compact even for long gaps; local list has every period.
+f <- parse_netcdf_filename("synthetic_t2m_degC_region_200001_200112_025_daily.nc")
+t <- netcdf_time_checks(c(0, 730), "days since 2000-01-01", "standard", f)
+stopifnot(nrow(t$period_details) > 24, length(t$evidence$missing_periods) == 24,
+  sum(t$period_details$kind == "missing") == t$evidence$missing_period_count)
+unlink(d, recursive = TRUE)
+cat("Team diagnostic exports passed: complete gap list, means/extrema, coordinates, layer counts and recorded numeric conversions.\n")

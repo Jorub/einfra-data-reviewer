@@ -172,6 +172,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   writeLines(payload, file.path(run, "submitted-summary.json"))
   write.csv(checks, file.path(run, "checks.csv"), row.names = FALSE)
   saveRDS(checks,file.path(run,"local-diagnostics.rds"))
+  write_diagnostic_tables(checks, run)
   # Create a conservative checkpoint before contacting the API.
   write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names = FALSE)
   metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
@@ -223,4 +224,58 @@ check_files <- function(paths, required_columns, numeric_columns = character(),
   if (!is.character(paths) || !length(paths) || anyNA(paths) || any(!nzchar(paths)))
     stop("Supply one or more explicit CSV file paths.")
   lapply(paths, function(path) check_csv(path, required_columns, numeric_columns, ranges, unique_key))
+}
+
+# Local diagnostics are deterministic exports, independent of LLM completion.
+write_diagnostic_tables <- function(checks, directory) {
+  evidence <- attr(checks, "review_evidence")
+  if (is.null(evidence)) return(invisible(NULL))
+  jsonlite::write_json(list(filename = evidence$filename, observed = evidence$observed,
+    value_scan = evidence$value_scan, processing_history = evidence$processing_history),
+    file.path(directory, "file-metadata.json"), auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+  observed <- evidence$observed
+  number <- function(x) if (is.numeric(x) && length(x) == 1) x else NA_real_
+  label <- function(x) if (is.character(x) && length(x) == 1) x else NA_character_
+  summary <- data.frame(filename = label(evidence$filename$basename),
+    variable = label(observed$variable), units = label(observed$units),
+    lon_first = number(observed$lon$first), lon_last = number(observed$lon$last),
+    lat_first = number(observed$lat$first), lat_last = number(observed$lat$last),
+    lon_min = number(observed$lon$min), lon_max = number(observed$lon$max),
+    lat_min = number(observed$lat$min), lat_max = number(observed$lat$max),
+    n_lon = number(observed$lon$count), n_lat = number(observed$lat$count),
+    n_layers = number(observed$time$count), time_first = label(observed$time$first),
+    time_last = label(observed$time$last), missing_period_count = number(observed$time$missing_period_count),
+    mean = number(evidence$value_scan$global_mean), min = number(evidence$value_scan$global_min),
+    max = number(evidence$value_scan$global_max),
+    mean_definition = "Finite cell-time arithmetic mean; no area or duration weighting",
+    stringsAsFactors = FALSE)
+  write.csv(summary, file.path(directory, "file-summary.csv"), row.names = FALSE)
+  for (item in list(c("local_slice_statistics", "layer-statistics.csv"),
+                    c("local_period_details", "time-period-issues.csv"))) {
+    table <- attr(checks, item[1])
+    if (!is.null(table)) write.csv(table, file.path(directory, item[2]), row.names = FALSE)
+  }
+  history <- evidence$processing_history
+  text <- if (isTRUE(history$available)) paste(history$text, collapse = "\n") else ""
+  # Extract only recorded CDO scalar arithmetic. This is not an inferred correction
+  # or proof of execution order/completeness; retain history for human interpretation.
+  matches <- regmatches(text, gregexpr(
+    "(?<![[:alnum:]_])(?:addc|subc|mulc|divc),[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?",
+    text, perl = TRUE))[[1]]
+  conversions <- data.frame(operator = character(), constant = numeric(),
+    recorded_operation = character(), evidence = character(), stringsAsFactors = FALSE)
+  if (length(matches)) {
+    fields <- strsplit(matches, ",", fixed = TRUE)
+    conversions <- data.frame(operator = vapply(fields, `[`, character(1), 1),
+      constant = as.numeric(vapply(fields, `[`, character(1), 2)), recorded_operation = matches,
+      evidence = "Recorded in history; not independently verified; not a proposed correction",
+      stringsAsFactors = FALSE)
+  }
+  write.csv(conversions, file.path(directory, "recorded-conversions.csv"), row.names = FALSE)
+  note <- if (!nzchar(text)) "Processing history unavailable or withheld; conversions unknown." else
+    if (!length(matches)) "No supported CDO scalar conversion found. Other tools/expressions may record conversions; inspect history." else
+      "Only recorded CDO addc/subc/mulc/divc operations are extracted. Not a complete processing recipe or approved correction."
+  writeLines(c(note, paste("History truncated:", isTRUE(history$truncated))),
+    file.path(directory, "conversion-notes.txt"))
+  invisible(NULL)
 }

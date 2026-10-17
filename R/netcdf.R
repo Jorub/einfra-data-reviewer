@@ -53,7 +53,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v4", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v5-team-diagnostics", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
     provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
@@ -166,7 +166,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     degree_units <- tolower(d$units) %in% if (axis == "lon") c("degrees_east", "degree_east") else c("degrees_north", "degree_north")
     add(paste0(axis, "_units"), degree_units, paste("Coordinate units:", d$units))
     if (finite) {
-      evidence$observed[[axis]] <- list(min = min(x), max = max(x), count = length(x),
+      evidence$observed[[axis]] <- list(first = x[1], last = tail(x, 1), min = min(x), max = max(x), count = length(x), units = d$units,
         direction = if (all(diff(x) > 0)) "increasing" else "decreasing",
         spacing_min = min(abs(diff(x))), spacing_max = max(abs(diff(x))))
       range_ok <- if (axis == "lat") min(x) >= -90 && max(x) <= 90 else
@@ -206,9 +206,10 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       good <- values[is.finite(values)]
       q <- if (length(good)) as.numeric(quantile(good, c(0, .01, .5, .99, 1), names = FALSE)) else rep(NA_real_, 5)
       stats[[i]] <- data.frame(index = i, missing = sum(is.na(values)), nonfinite = sum(!is.finite(values) & !is.na(values)),
-        finite = length(good), total = length(values), min = q[1], p01 = q[2], median = q[3], p99 = q[4], max = q[5])
+        finite = length(good), total = length(values), mean = if (length(good)) mean(good) else NA_real_, min = q[1], p01 = q[2], median = q[3], p99 = q[4], max = q[5])
     }
     stats <- do.call(rbind, stats)
+    stats$timestamp <- if (length(time_result$layer_timestamps) == nrow(stats)) time_result$layer_timestamps else NA_character_
     add("nonfinite_values", sum(stats$nonfinite) == 0, paste(sum(stats$nonfinite), "nonmissing nonfinite values"))
     add("nonempty_time_slices", all(stats$finite > 0), paste(sum(stats$finite == 0), "time slices without finite values"))
     evidence$value_scan <- list(scope = "All time slices; unweighted spatial quantiles, not area means", slices = nt,
@@ -227,6 +228,9 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       evidence$policy$land_missing_fraction_screen <- as.list(land_missing_range)
     }
     if (any(stats$finite > 0)) {
+      valid_means <- stats$finite > 0
+      evidence$value_scan$global_mean <- weighted.mean(stats$mean[valid_means], stats$finite[valid_means])
+      evidence$value_scan$mean_definition <- "Arithmetic mean of all finite cell-time values, no spatial-area or duration weighting"
       evidence$value_scan$global_min <- min(stats$min, na.rm = TRUE)
       evidence$value_scan$global_max <- max(stats$max, na.rm = TRUE)
     }
@@ -254,6 +258,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   } else add("system_tools", "NOT_CHECKED", "External queries disabled")
   result <- finish()
   if (exists("stats", inherits = FALSE)) attr(result, "local_slice_statistics") <- stats
+  attr(result, "local_period_details") <- time_result$period_details
   attr(result, "local_tool_results") <- tool_results
   result
 }

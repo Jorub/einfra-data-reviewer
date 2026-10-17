@@ -152,3 +152,15 @@ Each run creates a separate `rerun-*` folder containing an updated full index, s
 The masking convention is explicit: actual environmental values can retain the variable name `mask` after masking. Flag the missing renaming/units restoration as NAMING/METADATA; the name alone does not prove values became a binary mask. Values and physical plausibility are assessed separately.
 
 Additional test: `Rscript tests/test_rerun.R` (mock responses, no API calls).
+
+## Team diagnostic tables
+
+New scans save these local deterministic exports alongside each file's checks, including when the LLM fails or is disabled:
+
+- `file-summary.csv`: variable, stored units, first/last longitude and latitude in file order, coordinate min/max, longitude/latitude counts, layer count, first/last decoded time, missing-period count and overall mean/min/max.
+- `layer-statistics.csv`: timestamp/index and finite/missing/nonfinite counts plus mean/min/max and quantiles for every scanned time layer. Empty layers remain visible.
+- `time-period-issues.csv`: the complete list of missing, unexpected and duplicate periods within filename coverage. An empty table means no period issues were found; unsupported time decoding remains visible in checks. The API preview still includes only the first 24 missing/unexpected periods to bound its size.
+- `file-metadata.json`: observed metadata, numerical summaries and redacted processing history.
+- `recorded-conversions.csv`: numeric `addc`, `subc`, `mulc`, `divc` operations extracted from included redacted history, with `conversion-notes.txt` explaining limitations. These are recorded operations, not independently verified conversions or proposed fixes. Expressions and operations from other tools are not exhaustively parsed. History truncation/withholding is reported; no match does not prove no conversion occurred.
+
+Means use finite decoded values only and are unweighted arithmetic cell averages; the file mean weights layer means by finite-cell counts. They are not area-weighted climate means or duration-weighted temporal means. Grid first/last values are coordinate centres in storage order, not inferred cell edges. The short filename/result/reason CSV is unchanged. Older cached checks cannot supply new means or full gap lists: run a fresh scan for those details; an LLM-only retry cannot reconstruct them.

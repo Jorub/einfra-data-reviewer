@@ -49,6 +49,7 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
     variable <- attr(checks,"review_evidence")$observed$variable
     if(!is.null(variable)) index$variable[i] <- variable
     saveRDS(checks,file.path(local_dir,"local-diagnostics.rds"))
+    write_diagnostic_tables(checks, local_dir)
     write.csv(checks,file.path(local_dir,"checks.csv"),row.names = FALSE)
     initial <- review_summary(checks,"NOT_COMPLETED")
     index$result[i] <- initial$result; index$reason[i] <- initial$reason

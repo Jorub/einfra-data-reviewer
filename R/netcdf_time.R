@@ -4,10 +4,12 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
   add <- function(name, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = name, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
+  period_details <- data.frame(kind = character(), period = character(), stringsAsFactors = FALSE)
+  layer_timestamps <- character()
   evidence <- list(units = units, calendar = calendar, count = length(values))
   ordered <- length(values) > 0 && all(is.finite(values)) && all(diff(values) > 0)
   add("time_numeric_order", ordered, "Finite, unique and increasing native time coordinates")
-  finish <- function() list(checks = do.call(rbind, rows), evidence = evidence)
+  finish <- function() list(checks = do.call(rbind, rows), evidence = evidence, period_details = period_details, layer_timestamps = layer_timestamps)
   if (!all(is.finite(values)) || !length(values)) return(finish())
   if (!requireNamespace("CFtime", quietly = TRUE)) {
     add("time_coverage", "NOT_CHECKED", "CFtime unavailable; run setup.R")
@@ -25,6 +27,7 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
     }
     time <- CFtime::CFtime(units, calendar, points)
     stamps <- CFtime::as_timestamp(time, format = "timestamp")
+    layer_timestamps <- stamps
     dates <- substr(stamps, 1, 10)
     evidence$first <- stamps[1]; evidence$last <- tail(stamps, 1)
     evidence$bounds_used <- !is.null(bounds)
@@ -45,6 +48,9 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
     actual <- switch(frequency, monthly = substr(dates, 1, 7), daily = dates,
       hourly = substr(stamps, 1, 13), yearly = substr(dates, 1, 4), annual = substr(dates, 1, 4))
     missing <- setdiff(expected, actual); unexpected <- setdiff(actual, expected)
+    duplicates <- unique(actual[duplicated(actual)])
+    period_details <- data.frame(kind = c(rep("missing", length(missing)), rep("unexpected", length(unexpected)),
+      rep("duplicate", length(duplicates))), period = c(missing, unexpected, duplicates), stringsAsFactors = FALSE)
     duplicated <- sum(duplicated(actual))
     add("time_record_count", length(actual) == length(expected),
       paste("Expected", length(expected), frequency, "records; observed", length(actual)))
