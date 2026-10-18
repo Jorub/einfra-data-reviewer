@@ -1,5 +1,5 @@
-source("R/reviewer.R")
-source("R/netcdf.R")
+source("source/reviewer.R")
+source("source/netcdf.R")
 library(ncdf4)
 if (!requireNamespace("CFtime", quietly = TRUE)) stop("Install CFtime before running calendar-aware tests.")
 make_fixture <- function(path, units = "degC", variable = "t2m", months = 1:24,

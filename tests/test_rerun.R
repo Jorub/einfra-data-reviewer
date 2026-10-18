@@ -1,5 +1,5 @@
-source("R/reviewer.R")
-source("R/rerun.R")
+source("source/reviewer.R")
+source("source/rerun.R")
 # Entire test is synthetic; neither raw input data nor the API are accessed.
 root <- tempfile(); dir.create(root)
 batch <- file.path(root, "original"); dir.create(batch)

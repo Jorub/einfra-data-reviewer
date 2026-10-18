@@ -1,5 +1,5 @@
-source("R/reviewer.R")
-source("R/netcdf.R")
+source("source/reviewer.R")
+source("source/netcdf.R")
 stopifnot(parse_netcdf_filename("era5-land_t2m_degC_land_200001_201912_025_monthly.nc")$valid)
 bad <- parse_netcdf_filename("fldas_tp_mm_land_198201_2022112_025_yearly.nc")
 stopifnot(!bad$valid,grepl("end date",paste(bad$issues,collapse = " ")))

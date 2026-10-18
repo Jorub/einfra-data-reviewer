@@ -1,4 +1,4 @@
-source("R/reviewer.R")
+source("source/reviewer.R")
 f <- tempfile(fileext = ".csv")
 write.csv(data.frame(id = c(1,1,3), value = c(2,-4,NA)),f,row.names = FALSE)
 x <- check_csv(f,c("id","value"),"value",list(value = c(0,10)),"id")

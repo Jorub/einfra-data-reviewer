@@ -1,4 +1,4 @@
-source('R/reviewer.R');source('R/batch.R')
+source('source/reviewer.R');source('source/batch.R')
 # Test loop behavior without scanning data or making API calls.
 check_netcdf <- function(path,...) {
  if(path=='broken.nc') stop('Synthetic unreadable file')

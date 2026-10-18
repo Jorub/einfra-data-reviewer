@@ -2,11 +2,14 @@
 .einfra <- new.env(parent = emptyenv())
 endpoint <- "https://llm.ai.e-infra.cz/v1"
 
-set_api_key <- function() {
-  if (!interactive()) stop("Enter the key in an interactive RStudio session.")
-  if (!requireNamespace("getPass", quietly = TRUE)) stop("Install getPass first.")
-  key <- getPass::getPass("eINFRA API key (hidden; held in memory): ")
-  if (!nzchar(trimws(key))) stop("Empty key.")
+set_api_key <- function(credentials_file = path.expand("~/.config/einfra-data-reviewer/credentials.R")) {
+  if (!file.exists(credentials_file)) stop("Private credentials file missing; see README.md. No API call made.")
+  credentials <- new.env(parent = baseenv())
+  tryCatch(sys.source(credentials_file, envir = credentials),
+    error = function(e) stop("Cannot load private credentials; details suppressed.", call. = FALSE))
+  key <- credentials$api_key
+  if (!is.character(key) || length(key) != 1 || is.na(key) || !nzchar(trimws(key)))
+    stop("Private credentials must define a nonempty api_key.")
   .einfra$key <- trimws(key)
   invisible(NULL)
 }
@@ -33,7 +36,7 @@ review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) 
 }
 api_request <- function(route, payload = NULL) {
   if (!route %in% c("/models", "/chat/completions")) stop("Unsupported API route.")
-  if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Run set_api_key() first.")
+  if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Load private credentials with set_api_key() first.")
   h <- curl::new_handle(timeout = 180, connecttimeout = 20)
   curl::handle_setheaders(h, Authorization = paste("Bearer", .einfra$key),
                          "Content-Type" = "application/json")
@@ -233,6 +236,8 @@ write_diagnostic_tables <- function(checks, directory) {
   jsonlite::write_json(list(filename = evidence$filename, observed = evidence$observed,
     value_scan = evidence$value_scan, processing_history = evidence$processing_history),
     file.path(directory, "file-metadata.json"), auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
+  jsonlite::write_json(attr(checks, "scan_record"), file.path(directory, "scan-record.json"),
+    auto_unbox = TRUE, pretty = TRUE, null = "null", na = "null")
   observed <- evidence$observed
   number <- function(x) if (is.numeric(x) && length(x) == 1) x else NA_real_
   label <- function(x) if (is.character(x) && length(x) == 1) x else NA_character_

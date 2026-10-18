@@ -1,14 +1,17 @@
-# Sources ====================================================================
-source("setup.R")
-source("R/inventory.R")
+# Sources ---------------------------------------------------------------------
+source("source/inventory.R")
+source("source/configuration.R")
 
 # Settings ===================================================================
 # Set paths locally; keep private configuration out of public commits.
 root <- ""
-report_dir <- ""                    # outside the scanned data root
+report_dir <- "output"                    # outside the scanned data root
 recursive <- TRUE
 
-# Inventory ==================================================================
+# Inventory -------------------------------------------------------------------
+paths <- project_paths(data_root = root, output_dir = report_dir)
+root <- paths$data_root
+report_dir <- paths$output_dir
 if (!nzchar(root) || !dir.exists(root)) stop("Set root to the sim directory in Settings.")
 if (!nzchar(report_dir)) stop("Set report_dir in Settings.")
 inventory <- inventory_netcdf(root, report_dir, recursive = recursive)

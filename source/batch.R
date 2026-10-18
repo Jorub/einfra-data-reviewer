@@ -21,10 +21,18 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
   index <- data.frame(input_index = seq_along(file_specs),filename = names_only,input_path = input_paths,
     variable = "unspecified",checks_status = "PENDING",llm_status = "NOT_RUN",result = "INCOMPLETE",
     reason = "Not processed yet",report_path = "",stringsAsFactors = FALSE)
+  overview <- vector("list", length(file_specs))
   checkpoint <- function() {
     write.csv(index,file.path(batch,"review_index.csv"),row.names = FALSE)
     write.csv(index[c("filename","result","reason")],file.path(batch,"summary.csv"),row.names = FALSE)
     write.csv(index[index$result!="PASS",],file.path(batch,"flagged_files.csv"),row.names = FALSE)
+    rows <- lapply(seq_along(file_specs), function(i) {
+      prefix <- index[i, c("input_index", "filename", "input_path", "checks_status"), drop = FALSE]
+      displayed <- attr(file_specs, "data_file_paths")
+      prefix$data_file_path <- if (length(displayed) == length(file_specs)) displayed[i] else index$input_path[i]
+      cbind(prefix, if (is.null(overview[[i]])) empty_data_overview() else overview[[i]])
+    })
+    write.csv(do.call(rbind, rows), file.path(batch, "data_overview.csv"), row.names = FALSE)
   }
   checkpoint()
   for(i in seq_along(file_specs)) {
@@ -37,7 +45,15 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
     checks <- tryCatch({
       spec <- file_specs[[i]]
       if(!is.list(spec)||is.null(spec$path)||!nzchar(spec$path)) stop("Missing input path in file specification.")
-      do.call(check_netcdf,spec)
+      before <- source_file_stamp(spec$path)
+      checked <- do.call(check_netcdf, spec)
+      after <- source_file_stamp(spec$path)
+      attr(checked, "scan_record") <- list(scanner_version = attr(checked, "review_evidence")$checker_version,
+        scan_time_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
+        scanner_files_md5 = as.list(tools::md5sum(c("source/netcdf.R", "source/netcdf_time.R", "source/netcdf_families.R"))),
+        before = before, after = after,
+        source_unchanged_during_scan = identical(before, after))
+      checked
     },error = function(e) {
       index$checks_status[i] <<- "ERROR"
       index$reason[i] <<- paste("NetCDF check error:",conditionMessage(e))
@@ -50,6 +66,7 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
     if(!is.null(variable)) index$variable[i] <- variable
     saveRDS(checks,file.path(local_dir,"local-diagnostics.rds"))
     write_diagnostic_tables(checks, local_dir)
+    overview[[i]] <- data_overview_row(checks, local_dir)
     write.csv(checks,file.path(local_dir,"checks.csv"),row.names = FALSE)
     initial <- review_summary(checks,"NOT_COMPLETED")
     index$result[i] <- initial$result; index$reason[i] <- initial$reason
@@ -118,4 +135,46 @@ folder_file_specs <- function(root, family, recursive = TRUE,
     use_system_tools = use_system_tools, include_history = include_history))
   attr(specs, "excluded_entries") <- excluded
   specs
+}
+
+# Source identity is local only; file stat checks are not content checksums.
+source_file_stamp <- function(path) {
+  info <- file.info(path)
+  list(bytes = unname(info$size), modified_utc = format(info$mtime, tz = "UTC", usetz = TRUE))
+}
+empty_data_overview <- function() {
+  data.frame(variable = NA_character_, units = NA_character_, mean = NA_real_, min = NA_real_, max = NA_real_,
+    lon_first = NA_real_, lon_last = NA_real_, lat_first = NA_real_, lat_last = NA_real_,
+    lon_min = NA_real_, lon_max = NA_real_, lat_min = NA_real_, lat_max = NA_real_,
+    lon_spacing = NA_real_, lat_spacing = NA_real_, n_lon = NA_real_, n_lat = NA_real_,
+    n_layers = NA_real_, time_first = NA_character_, time_last = NA_character_, missing_period_count = NA_real_,
+    recorded_operations = NA_character_, history_truncated = NA, scanner_version = NA_character_,
+    scan_time_utc = NA_character_, bytes = NA_real_, modified_utc = NA_character_,
+    source_unchanged_during_scan = NA, stringsAsFactors = FALSE)
+}
+data_overview_row <- function(checks, directory) {
+  row <- empty_data_overview()
+  summary <- read.csv(file.path(directory, "file-summary.csv"), stringsAsFactors = FALSE)
+  names_to_copy <- intersect(names(row), names(summary))
+  row[1, names_to_copy] <- summary[1, names_to_copy]
+  evidence <- attr(checks, "review_evidence")
+  row$lon_spacing <- if (is.null(evidence$observed$lon$spacing_min)) NA_real_ else evidence$observed$lon$spacing_min
+  row$lat_spacing <- if (is.null(evidence$observed$lat$spacing_min)) NA_real_ else evidence$observed$lat$spacing_min
+  history <- evidence$processing_history
+  row$history_truncated <- isTRUE(history$truncated)
+  if (isTRUE(history$available)) {
+    # Preserve included, redacted history verbatim; do not infer execution order or corrections.
+    row$recorded_operations <- paste(history$text, collapse = "\n")
+  }
+  record <- attr(checks, "scan_record")
+  if (!is.null(record)) {
+    row$scanner_version <- if (is.null(record$scanner_version)) NA_character_ else record$scanner_version
+    row$scan_time_utc <- record$scan_time_utc
+    row$bytes <- record$before$bytes; row$modified_utc <- record$before$modified_utc
+    row$source_unchanged_during_scan <- record$source_unchanged_during_scan
+  }
+  row
+}
+scan_netcdf_files <- function(file_specs, output_dir) {
+  run_netcdf_reviews(file_specs, output_dir = output_dir, send_to_api = FALSE)
 }

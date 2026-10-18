@@ -15,3 +15,14 @@ reports/
 private/
 *.log
 .DS_Store
+
+# Private configuration and all local run products
+config/paths.local.R
+config/credentials.R
+credentials.R
+output/
+report/
+report_*/
+*.nc
+*.nc4
+*.cdf

@@ -1,5 +1,5 @@
-source("R/inventory.R")
-source("R/batch.R")
+source("source/inventory.R")
+source("source/batch.R")
 root <- tempfile(); dir.create(root)
 for (sub in c("raw", "processed", "raw/.ipynb_checkpoints")) dir.create(file.path(root, sub), recursive = TRUE)
 paths <- c(file.path(root, "raw", "synthetic_t2m_K_land_200001_200012_025_monthly.nc"),

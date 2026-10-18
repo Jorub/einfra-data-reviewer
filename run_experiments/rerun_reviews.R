@@ -1,12 +1,13 @@
-# Sources ====================================================================
-source("setup.R")
-source("R/reviewer.R")
-source("R/rerun.R")
+# Sources ---------------------------------------------------------------------
+source("source/reviewer.R")
+source("source/configuration.R")
+source("source/rerun.R")
 
-# Settings ===================================================================
+# Configuration ---------------------------------------------------------------
 batch_dir <- ""                      # original batch folder containing review_index.csv
-output_dir <- ""                     # private destination; original results stay unchanged
+output_dir <- "output"                     # private destination; original results stay unchanged
 model <- "thinker"
+credentials_file <- path.expand("~/.config/einfra-data-reviewer/credentials.R")
 reasoning_effort <- NULL
 retry_statuses <- "TOKEN_LIMIT"       # optionally add API_ERROR for one manual retry
 same_budget_first <- FALSE            # TRUE: repeat original budget before doubling
@@ -16,9 +17,10 @@ max_input_bytes <- 64000L
 send_to_api <- FALSE                  # explicit approval for selected cached evidence/new prompt
 clear_key_after <- TRUE
 
-# Retry LLM stage only =======================================================
-if (send_to_api && !exists("key", envir = .einfra, inherits = FALSE)) set_api_key()
-result <- rerun_llm_reviews(batch_dir = batch_dir, output_dir = output_dir,
+# Retry LLM stage only --------------------------------------------------------
+paths <- project_paths(output_dir = output_dir)
+if (send_to_api && !exists("key", envir = .einfra, inherits = FALSE)) set_api_key(credentials_file)
+result <- rerun_llm_reviews(batch_dir = batch_dir, output_dir = paths$output_dir,
   model = model, reasoning_effort = reasoning_effort, retry_statuses = retry_statuses,
   same_budget_first = same_budget_first, fallback_max_tokens = fallback_max_tokens,
   max_retry_tokens = max_retry_tokens, max_input_bytes = max_input_bytes,

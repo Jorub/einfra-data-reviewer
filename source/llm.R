@@ -1,4 +1,4 @@
-# Direct, single-call text interaction. Source R/reviewer.R for authentication.
+# Direct, single-call text interaction. Source source/reviewer.R for authentication.
 build_prompt <- function(role, context, task, evidence = "", constraints = "",
                          output_format = "", success_criteria = "") {
   parts <- list(Role = role, Context = context, Task = task, Constraints = constraints,

@@ -1,4 +1,4 @@
-source('R/inventory.R')
+source('source/inventory.R')
 library(ncdf4)
 root <- tempfile('inventory-input-');out <- tempfile('inventory-reports-')
 dir.create(root);dir.create(out)

@@ -1,25 +1,20 @@
-# Run once from the project root in RStudio: source("setup.R")
-# Install only missing runtime packages; leave installed versions unchanged.
-required_packages <- c("curl", "jsonlite", "getPass", "ncdf4", "CFtime")
-missing_packages <- required_packages[!vapply(
-  required_packages, requireNamespace, logical(1), quietly = TRUE
-)]
+# Sources ---------------------------------------------------------------------
+source("source/project_setup.R")
 
+# Configuration ---------------------------------------------------------------
+required_packages <- c("curl", "jsonlite", "ncdf4", "CFtime")
+private_dir <- path.expand("~/.config/einfra-data-reviewer")
+
+# Setup -----------------------------------------------------------------------
+setup_project(private_dir = private_dir)
+missing_packages <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
 if (length(missing_packages)) {
-  message("Installing missing packages: ", paste(missing_packages, collapse = ", "))
   configured_repos <- getOption("repos")
   if (is.null(configured_repos) || !length(configured_repos) ||
-      any(is.na(configured_repos) | configured_repos == "@CRAN@" | !nzchar(configured_repos))) {
+      any(is.na(configured_repos) | configured_repos == "@CRAN@" | !nzchar(configured_repos)))
     configured_repos <- c(CRAN = "https://cloud.r-project.org")
-  }
   install.packages(missing_packages, repos = configured_repos)
 }
-
-unavailable <- required_packages[!vapply(
-  required_packages, requireNamespace, logical(1), quietly = TRUE
-)]
-if (length(unavailable)) {
-  stop("Setup incomplete; packages unavailable: ", paste(unavailable, collapse = ", "),
-       ". Check installation messages, network access, and library write permissions.")
-}
-message("Setup complete: curl, jsonlite, getPass, ncdf4, and CFtime are available. No API key needed.")
+unavailable <- required_packages[!vapply(required_packages, requireNamespace, logical(1), quietly = TRUE)]
+if (length(unavailable)) stop("Setup incomplete; packages unavailable: ", paste(unavailable, collapse = ", "))
+message("Setup complete. Fill your private credentials file only when API review is needed. Existing configuration preserved.")

@@ -1,5 +1,5 @@
-source("R/reviewer.R")
-source("R/llm.R")
+source("source/reviewer.R")
+source("source/llm.R")
 p <- build_prompt("role","context","task","synthetic evidence","constraints","Markdown","specific answer")
 stopifnot(grepl("Supplied evidence",p,fixed = TRUE),grepl("task",p,fixed = TRUE))
 stopifnot(inherits(try(build_prompt("r","c",""),silent = TRUE),"try-error"))

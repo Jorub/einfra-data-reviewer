@@ -1,5 +1,5 @@
-source("R/netcdf_families.R")
-source("R/netcdf_time.R")
+source("source/netcdf_families.R")
+source("source/netcdf_time.R")
 
 # Filename claims are the expected contract. Do not silently repair malformed names.
 parse_netcdf_filename <- function(path) {
