@@ -22,7 +22,12 @@ for (folder in c("raw", "processed")) {
 inputs <- file.path(work, "inputs.csv")
 write.csv(data.frame(data_file_path = c(file.path("raw", name), file.path("processed", name), "missing.nc"),
   family = "temperature"), inputs, row.names = FALSE)
+# Spreadsheet/hand-edited CSV categories may have surrounding or quoted spaces.
+input_table <- read.csv(inputs, stringsAsFactors = FALSE)
+input_table$family <- c("temperature  ", "  temperature", "   ")
+write.csv(input_table, inputs, row.names = FALSE)
 specs <- read_data_file_paths(inputs, work)
+stopifnot(specs[[1]]$family == "temperature", specs[[2]]$family == "temperature", is.null(specs[[3]]$family))
 specs <- configure_scan_specs(specs, use_system_tools = FALSE)
 attr(specs, "data_file_paths") <- c(file.path("raw", name), file.path("processed", name), "missing.nc")
 # Scanning must not invoke inference or need credentials.

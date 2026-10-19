@@ -2,6 +2,10 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-19 — Input-table whitespace
+
+- Trim surrounding whitespace from the optional variable-category field when reading the CSV. Whitespace-only categories are treated as unspecified, allowing inference. Preserve file paths and provenance text unchanged. Regression coverage includes quoted whitespace from spreadsheet-style exports.
+
 ## 2026-10-18 — Separate saved scans from model review
 
 - Move reusable functions to source/ and runners to run_experiments/; add configuration templates, repository contribution/agent guidance and a current usage README.

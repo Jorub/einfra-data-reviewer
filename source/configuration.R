@@ -27,7 +27,10 @@ read_data_file_paths <- function(table_file, data_root = "") {
   # File existence is checked per file by the scan, so one missing file cannot stop a batch.
   specs <- lapply(seq_along(paths), function(i) {
     spec <- list(path = resolved[i])
-    if ("family" %in% names(table) && !is.na(table$family[i]) && nzchar(table$family[i])) spec$family <- table$family[i]
+    if ("family" %in% names(table) && !is.na(table$family[i])) {
+      group <- trimws(as.character(table$family[i]))
+      if (nzchar(group)) spec$family <- group
+    }
     if ("provenance_notes" %in% names(table) && !is.na(table$provenance_notes[i])) spec$provenance_notes <- table$provenance_notes[i]
     spec
   })
