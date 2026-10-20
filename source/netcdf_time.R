@@ -70,6 +70,13 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
       if (!is.null(bounds)) {
         lo <- CFtime::as_timestamp(CFtime::CFtime(units, calendar, bounds[1, ]), format = "timestamp")
         hi <- CFtime::as_timestamp(CFtime::CFtime(units, calendar, bounds[2, ]), format = "timestamp")
+        # CFtime can omit the clock for exact midnight. Normalise that valid
+        # representation before comparing full-year interval boundaries.
+        lo <- gsub(" ", "T", lo, fixed = TRUE); hi <- gsub(" ", "T", hi, fixed = TRUE)
+        date_only <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", lo)
+        lo[date_only] <- paste0(lo[date_only], "T00:00:00")
+        date_only <- grepl("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", hi)
+        hi[date_only] <- paste0(hi[date_only], "T00:00:00")
         yr <- as.integer(substr(dates, 1, 4))
         full <- substr(lo, 1, 19) == sprintf("%04d-01-01T00:00:00", yr) &
           substr(hi, 1, 19) == sprintf("%04d-01-01T00:00:00", yr + 1)

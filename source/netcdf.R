@@ -51,11 +51,20 @@ sanitize_history <- function(text, max_chars = 6000L) {
        note = "Common paths/credentials/URLs redacted automatically; not a guarantee. Inspect preview. History records operations, not proof that processing was correct.")
 }
 
+# Required scan dependencies must be present before reading environmental arrays.
+check_scan_dependencies <- function() {
+  required <- c("ncdf4", "CFtime", "jsonlite")
+  missing <- required[!vapply(required, requireNamespace, logical(1), quietly = TRUE)]
+  if (length(missing)) stop("Scan prerequisites missing: ", paste(missing, collapse = ", "),
+    ". Run source(\"setup.R\") before scanning; no data values were read.")
+  invisible(NULL)
+}
+
 # All scientific expectations come from the filename; family and notes add context.
 check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes = "",
                          scan_values = TRUE, use_system_tools = TRUE, include_history = TRUE,
                          land_missing_range = c(0.50, 0.85)) {
-  if (!requireNamespace("ncdf4", quietly = TRUE)) stop("Run setup.R to install ncdf4.")
+  check_scan_dependencies()
   if (!file.exists(path)) stop("NetCDF input does not exist.")
   if (!is.character(provenance_notes) || length(provenance_notes) != 1 || is.na(provenance_notes)) stop("provenance_notes must be text.")
   if (length(land_missing_range) != 2 || any(!is.finite(land_missing_range)) ||
@@ -66,7 +75,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v5-team-diagnostics", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v6-required-calendar", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
     provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
@@ -151,7 +160,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   units <- as.character(att(variable, "units", ""))
   add("filename_units", identical(canonical_units(f$units), canonical_units(units)), paste("Filename:", f$units, "; stored:", units))
   cell_methods <- as.character(att(variable, "cell_methods", ""))
-  evidence$observed <- list(variable = variable, units = units, dimensions = as.list(setNames(dl, dn)),
+  evidence$observed <- list(variable = variable, units = units, storage_type = v$prec, dimensions = as.list(setNames(dl, dn)),
     long_name = sanitize_history(att(variable, "long_name", ""), 500L)$text,
     standard_name = sanitize_history(att(variable, "standard_name", ""), 500L)$text,
     scale_factor = att(variable, "scale_factor", 1), add_offset = att(variable, "add_offset", 0),

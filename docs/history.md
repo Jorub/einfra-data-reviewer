@@ -2,6 +2,13 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Audit scan and review reliability
+
+- Block new scans before reading values when ncdf4, CFtime or jsonlite is unavailable. Previously a missing calendar package allowed expensive scans whose temporal coverage remained unchecked.
+- Correct annual-bound completeness checks for CFtime's valid date-only representation of midnight. Full calendar years no longer fail solely because the timestamp omitted T00:00:00; genuine partial intervals still fail.
+- Add observed storage type to numerical evidence to avoid unsupported packing assumptions. Validate integer completion budgets and print/save the effective model/token settings without changing defaults.
+- Add annual Gregorian/no-leap/360-day boundary, missing/duplicate-year, PET input, signed wind/radiation, packed-short decoding and resource-setting propagation regressions. Existing malformed-filename policy, negative-ET interpretation, timeout and token defaults are unchanged.
+
 ## 2026-10-20 — Preserve numeric CDO ranges in redacted history
 
 - Fix path redaction that changed seltimestep,1/20 into a misleading single-timestep operation. Protect complete numeric CDO argument tokens while continuing to redact file paths and credentials; record sanitizer version in included history.

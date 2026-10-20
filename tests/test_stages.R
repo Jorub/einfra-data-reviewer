@@ -43,15 +43,18 @@ original_index <- tools::md5sum(file.path(scan$run_dir, "review_index.csv"))
 unlink(file.path(work, c("raw", "processed")), recursive = TRUE)
 check_netcdf <- function(...) stop("Unexpected rescan")
 api_calls <- 0L
-api_request <- function(...) {
+requested_budgets <- numeric()
+api_request <- function(route, payload) {
+  requested_budgets <<- c(requested_budgets, payload$max_tokens)
   api_calls <<- api_calls + 1L
   if (api_calls == 1L) stop("Synthetic API failure")
   list(model = "fake", choices = list(list(finish_reason = "stop", message = list(content =
     '{"verdict":"PASS","reason":"No issue identified in synthetic evidence","report_markdown":"Synthetic review."}'))),
     usage = list(prompt_tokens = 100, completion_tokens = 30, total_tokens = 130))
 }
-review <- review_saved_scans(scan$run_dir, file.path(work, "outputs"), model = "fake", send_to_api = TRUE)
-stopifnot(api_calls == 2, review$index$llm_status[1] == "API_ERROR", review$index$llm_status[2] == "COMPLETED",
+review <- review_saved_scans(scan$run_dir, file.path(work, "outputs"), model = "fake", max_tokens = 16384L, send_to_api = TRUE)
+settings <- jsonlite::read_json(file.path(review$run_dir, "review-settings.json"))
+stopifnot(settings$max_tokens == 16384, all(requested_budgets == 16384), api_calls == 2, review$index$llm_status[1] == "API_ERROR", review$index$llm_status[2] == "COMPLETED",
   review$index$checks_status[3] == "ERROR", identical(original_index, tools::md5sum(file.path(scan$run_dir, "review_index.csv"))),
   identical(readLines(file.path(scan$run_dir, "data_overview.csv")), readLines(file.path(review$run_dir, "data_overview.csv"))))
 # A preview-only second stage must not submit or mark an LLM review completed.

@@ -176,5 +176,6 @@ data_overview_row <- function(checks, directory) {
   row
 }
 scan_netcdf_files <- function(file_specs, output_dir) {
+  check_scan_dependencies()
   run_netcdf_reviews(file_specs, output_dir = output_dir, send_to_api = FALSE)
 }

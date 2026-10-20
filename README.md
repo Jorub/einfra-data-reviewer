@@ -47,7 +47,7 @@ Choose a runner, edit its configuration, then run it from the top:
 - `run_experiments/scan_file.R`: one explicitly configured file.
 - `run_experiments/scan_temperature.R`: discover the temperature folder, including raw/processed subfolders; excludes hidden entries and symlinks.
 
-Scans read all time layers sequentially and checkpoint a random `batch-*` folder after each file. Daily/hourly files may take substantial time. No model is called during this stage.
+Scans read all time layers sequentially and checkpoint a random `batch-*` folder after each file. Daily/hourly files may take substantial time. No model is called during this stage. New scans check ncdf4, CFtime and jsonlite before starting; missing prerequisites stop with setup instructions instead of completing an expensive scan without time checks.
 
 Each batch includes **`data_overview.csv`**, one row per requested input, including unreadable/missing files. It contains the table path and resolved input path, variable, units, mean/min/max, grid endpoints/extents/spacing/counts, layer count, time coverage and missing-period count. `recorded_operations` retains the included redacted history (possibly multiline), without inferring a complete recipe. File size/mtime, scan time and scanner version are included; exact scanner-file checksums are stored in each `scan-record.json`. Source size/mtime before and after the scan are recorded; they are not content hashes.
 
@@ -55,7 +55,7 @@ Detailed per-file outputs remain:
 
 - `checks.csv`, `local-diagnostics.rds`, `review-preview.json`.
 - `file-summary.csv`, `layer-statistics.csv`, `time-period-issues.csv` (complete missing/unexpected/duplicate period lists).
-- `file-metadata.json`, `scan-record.json`, `recorded-conversions.csv`, `conversion-notes.txt`.
+- `file-metadata.json` (including actual NetCDF storage type and packing attributes), `scan-record.json`, `recorded-conversions.csv`, `conversion-notes.txt`.
 
 An unsupported or malformed file may have fewer diagnostics; missing values do not imply a clean check. Overview means are unweighted finite cell-time averages, not area-weighted climate means. See [review policy](docs/review-policy.md) for scientific conventions and limitations.
 
@@ -65,7 +65,7 @@ Open `run_experiments/review_scans.R`. Set `scan_dir` to the saved `batch-*` dir
 
 With `send_to_api = FALSE`, the script saves updated previews without calling the service. Inspect them, then explicitly enable submission with TRUE. Selecting TRUE approves the built-in basename, selected metadata, diagnostics and redacted-history payloads for the selected cached files; raw arrays and input paths are not automatically submitted. Redaction is best-effort, not a privacy guarantee. Do not submit confidential filenames or notes.
 
-The model/effort/token/input-size settings are visible at the top. Existing budgets remain unchanged: default 8192 completion tokens, 64 kB input guard, 180-second API timeout and 20-second connection timeout. Completion budgets can include reasoning. `reasoning_effort = NULL` omits that field and uses the provider default; explicit support is model-dependent. Timeout/resource changes and parallel execution are separate future choices, not bundled into the restructure.
+The model/effort/token/input-size settings are visible at the top. Each saved-scan review prints its effective model/budget and saves review-settings.json before any calls, so an edited but unsourced runner cannot be mistaken for the applied configuration. Existing budgets remain unchanged: default 8192 completion tokens, 64 kB input guard, 180-second API timeout and 20-second connection timeout. Completion budgets can include reasoning. `reasoning_effort = NULL` omits that field and uses the provider default; explicit support is model-dependent. Timeout/resource changes and parallel execution are separate future choices, not bundled into the restructure.
 
 Reviews create a new random `batch-*` folder; original scans remain unchanged. Already completed reviews are retained without repeating calls. Per-file errors do not stop the next file.
 

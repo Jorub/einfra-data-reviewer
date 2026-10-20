@@ -151,6 +151,12 @@ review_summary <- function(checks, llm_status, parsed = NULL) {
   }
   data.frame(filename = f,result = status,reason = paste(reasons,collapse = "; "),stringsAsFactors = FALSE)
 }
+validate_completion_budget <- function(max_tokens) {
+  if (!is.numeric(max_tokens) || length(max_tokens) != 1 || !is.finite(max_tokens) ||
+      max_tokens != floor(max_tokens) || max_tokens < 256 || max_tokens > 65536)
+    stop("Completion budget must be an integer between 256 and 65536, supported by the selected model.")
+  invisible(NULL)
+}
 review_checks <- function(checks, model, approved_payload, send = FALSE,
                           report_dir, max_tokens = 8192L, reasoning_effort = NULL,
                           max_input_bytes = 64000L) {
@@ -160,14 +166,14 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   payload <- as.character(prepare_review(checks))
   if (!isTRUE(send)) stop("Preview prepare_review(checks), then explicitly set send = TRUE.")
   if (!identical(as.character(approved_payload), payload)) stop("Checks changed since preview; preview again.")
-  if (length(model) != 1 || !nzchar(model)) stop("Choose a model from list_models().")
+  if (!is.character(model) || length(model) != 1 || is.na(model) || !nzchar(model)) stop("Choose a model from list_models().")
   input_bytes <- nchar(payload, type = "bytes")
   if (length(max_input_bytes) != 1 || !is.numeric(max_input_bytes) ||
       !is.finite(max_input_bytes) || max_input_bytes < 1) stop("max_input_bytes must be a positive byte limit.")
   if (input_bytes > max_input_bytes) stop("Review payload is ", input_bytes,
     " bytes, exceeding max_input_bytes = ", max_input_bytes,
     ". Increase the configured limit after inspecting the preview; nothing was sent.")
-  if (length(max_tokens) != 1 || is.na(max_tokens) || max_tokens < 256 || max_tokens > 65536) stop("Completion budget must be 256–65536 tokens and supported by the selected model.")
+  validate_completion_budget(max_tokens)
   if (missing(report_dir) || length(report_dir) != 1 || !nzchar(report_dir)) stop("Choose an explicit local report directory.")
   if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE, showWarnings = FALSE)) stop("Cannot create report directory.")
   run <- tempfile("review-", tmpdir = report_dir)
