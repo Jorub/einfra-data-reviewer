@@ -2,6 +2,13 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Five-category review pilot
+
+- Add an editable prompt and separate selected-file runner using cached scans, with five independent results: variable/metadata, grid/spatial coverage, time coverage, variable values and source/processing. Require a brief concrete finding and feasible next action per group; retain detailed per-file reports and the separate numerical overview.
+- Pilot PASS/FAIL/REVIEW/NOT_CHECKED categories keep missing-history documentation failures separate from numerical findings and avoid turning optional metadata or unperformed optional checks into blanket failures. Deterministic failures and essential gaps guard each category. The established single-verdict reviewer remains available.
+- Start the three-file experiment with the previously chosen 20,000 completion tokens, provider-default reasoning setting and unchanged transport limits. Save API/schema completion separately, continue after individual failures and preserve original scans. No live model calls were made during implementation.
+- Normalize pct/percent/% as equivalent metadata spellings; correct the known mismatch only in pilot cache copies without numerical conversion. Add mocked regression coverage for five-group schemas, category guards, private local-attribute exclusion, cached-only execution, continuation after token/schema failures and original-cache preservation.
+
 ## 2026-10-20 — Human-readable linked run folders
 
 - Use a single random scan identifier across scan-<id>, review-<id> and numbered rerun-<id>-01 folders. Repeated reviews and refreshed scan revisions receive numbered suffixes, never overwrite prior runs, and keep explicit parent/scan identity in run-lineage.json.

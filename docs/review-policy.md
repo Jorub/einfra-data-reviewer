@@ -60,6 +60,12 @@ Selected source attributes, cell_methods and redacted global history enter the a
 Common credential patterns, paths, identities and URLs in history/provenance metadata are redacted. Redaction is best-effort: always inspect the preview. The basename itself is intentionally sent because it encodes expectations. Do not use filenames containing secrets. Do not submit raw full headers, raw arrays or private paths. Tools missing/failing are NOT_CHECKED, not automatically a data failure.
 
 
+## Five-group pilot interpretation
+
+The optional grouped-review pilot tests a revised interpretation alongside the established single-verdict reviewer. It emits variable/metadata, grid/spatial coverage, time coverage, variable values and source/processing results separately. PASS covers performed checks, FAIL identifies demonstrated inconsistencies or unmet explicit requirements, REVIEW identifies a concrete concern needing verification, and NOT_CHECKED identifies unavailable essential checks. A deterministic FAIL blocks PASS within its own group; WARN becomes REVIEW rather than a whole-file failure. Required missing history remains a source/processing documentation FAIL. Optional attributes, unperformed independent mask comparisons and missing local aggregation commands for native-frequency source products do not by themselves establish a data error. Exact unresolved source/temporal definitions still require attention, with a specific question or verification rather than generic provenance objections in every group.
+
+Known `pct`, `percent` and `%` unit spellings are equivalent. This is metadata normalization, never an inferred percentage/fraction numeric conversion. The pilot corrects this known cached mismatch in a copy; original scan evidence remains intact. The established reviewer and its retry format are unchanged; the pilot's per-group summary and completion index are separate formats.
+
 ## Interpretation and limitations
 
 PASS means no issue identified within performed checks, not scientific certification. FAIL includes known data, naming or provenance flags. INCOMPLETE means important checks or model assessment did not finish. Deterministic FAIL/WARN cannot be overridden by model PASS. Unsupported essential checks block PASS.

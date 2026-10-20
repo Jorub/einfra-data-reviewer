@@ -84,6 +84,24 @@ Keys are read only when API calls are enabled, held in R memory and never intent
 
 The deterministic `data_overview.csv` is copied forward unchanged when present; model conclusions do not modify statistics. FAIL includes strict provenance/naming flags, not only incorrect numerical values. A known deterministic failure remains FAIL even if the LLM is unfinished. Scan-only summary rows cannot constitute a completed LLM review.
 
+## Five-category review pilot
+
+Use `run_experiments/review_grouped_pilot.R` to try the revised prompt on **three saved scans** before replacing the established reviewer. Set `scan_dir` to the original scan folder and choose `input_rows` from its `review_index.csv`; the example selects rows 1, 5 and 13. Run from the top with `send_to_api = FALSE`, inspect each `grouped-preview.txt`, then set TRUE and rerun to submit. No NetCDF rescan is performed. Credentials are loaded only when submission is enabled.
+
+The editable prompt is [docs/grouped-review-prompt.md](docs/grouped-review-prompt.md). It requests five separate assessments: variable/metadata, grid/spatial coverage, time coverage, variable values, and source/processing. Each has a result, concrete finding and next action. PASS means no actionable issue within the performed checks; FAIL identifies a demonstrated problem or unmet explicit requirement; REVIEW asks for a specific verification; NOT_CHECKED identifies unavailable essential checking. Missing required history remains a documentation FAIL confined to source/processing, rather than failing every category. Existing deterministic failures cannot be dismissed by a model PASS.
+
+The pilot starts at the current experiment's **20,000 completion tokens**, with `reasoning_effort = NULL`. This is a test budget, not a guarantee of completion; usage and finish reasons are saved per attempt. Timeout and input-size settings are unchanged. Compare the returned findings and token usage before increasing the budget or reviewing all files.
+
+Pilot outputs use a separate numbered `review-<scan-id>` folder:
+
+- `summary.csv`: **`data_file_path,check_group,result,finding,next_action`**, five rows per selected file, with no overall verdict.
+- `flagged_files.csv`: the non-PASS category rows.
+- `pilot_index.csv`: API/preparation/schema completion status per selected file; a known deterministic failure can remain FAIL even if the LLM call failed. Preview-only rows are not completed model assessments.
+- Each file retains `group-results.csv`, a readable `review.md`, the submitted prompt, cached pilot checks and model response/usage metadata. A transport-complete response can still be INVALID_RESPONSE if its five-category JSON is invalid; use `pilot_index.csv` for assessment completion.
+- `data_overview.csv` is copied unchanged when present, retaining the numerical overview separately.
+
+Original scans and the established reviewer remain intact. The pilot does not create the legacy `review_index.csv`; do not point the existing retry runner at a pilot folder. To repeat a trial, run the pilot again against the saved scan with selected rows. A cached `pct`/`percent` units mismatch is corrected as a known spelling equivalence in the pilot copy, without rescaling values or rewriting the original scan.
+
 ## Repair old redacted history without a value scan
 
 Older previews may contain `seltimestep,1[PATH REDACTED]` instead of `seltimestep,1/20`. The current sanitizer preserves complete numeric CDO argument ranges while still redacting paths. Lost text cannot be reconstructed from the old preview.

@@ -18,6 +18,7 @@ parse_netcdf_filename <- function(path) {
 }
 canonical_units <- function(x) {
   z <- tolower(gsub("[ _°]", "", x))
+  if (z %in% c("pct", "percent", "%")) return("percent")
   if (z %in% c("degc", "degreecelsius", "degreescelsius", "celsius", "degreec", "degreesc")) "degc" else
     if (z %in% c("k", "kelvin", "kelvins")) "k" else z
 }
