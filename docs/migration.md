@@ -26,7 +26,7 @@ Run setup.R once. It creates folders and a blank credentials template outside th
 
 config/data_file_paths.csv has a required data_file_path column and optional family/provenance_notes. Relative file paths use data_root; relative run/output paths use the project root. An empty table intentionally stops with instructions rather than scanning a guessed directory. Absolute paths are allowed but may be inappropriate to publish.
 
-The default output/ is ignored, but you can continue using your original persistent report directory via output_dir. Random batch-*/rerun-* naming is preserved. Outputs are not relocated or deleted. Setup creates the default project output folder; runners create explicitly configured external output directories when needed.
+The default output/ is ignored, but you can continue using your original persistent report directory via output_dir. New scans use scan-<id>; reviews reuse the same id as review-<id>, with -02, -03 suffixes for repeated reviews. Retries use rerun-<id>-01, -02, etc. History refreshes produce numbered scan revisions with the same id. Existing batch-* folders remain valid and are never renamed. New descendants adopt an old folder label when no run-lineage.json exists. Preserve that metadata file when copying new runs so later stages retain their original scan identifier. Outputs are not relocated or deleted. Setup creates the default project output folder; runners create explicitly configured external output directories when needed.
 
 ## Existing saved evidence
 

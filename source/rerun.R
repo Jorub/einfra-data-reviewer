@@ -1,3 +1,5 @@
+source("source/run_paths.R")
+
 # Rerun selected LLM stages from cached checks; never reopen or modify NetCDF data.
 read_attempt <- function(report_path) {
   p <- file.path(report_path, "metadata.json")
@@ -30,8 +32,7 @@ rerun_llm_reviews <- function(batch_dir, output_dir, model = "thinker", reasonin
   required <- c("filename", "checks_status", "llm_status", "result", "reason", "report_path")
   if (!all(required %in% names(index))) stop("Unsupported original index schema.")
   if (!dir.exists(output_dir) && !dir.create(output_dir, recursive = TRUE)) stop("Cannot create output directory.")
-  run <- tempfile("rerun-", tmpdir = output_dir)
-  dir.create(run)
+  run <- linked_run_directory(batch_dir, output_dir, "rerun")
   for (name in c("data_overview.csv", "input-files.csv", "excluded-entries.txt")) {
     origin <- file.path(batch_dir, name)
     if (file.exists(origin)) file.copy(origin, file.path(run, name), overwrite = FALSE)

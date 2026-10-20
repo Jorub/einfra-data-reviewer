@@ -1,3 +1,5 @@
+source("source/run_paths.R")
+
 # Sequential pilot runner. Each file has an explicit scientific contract.
 # No automatic retries: record failure, checkpoint index, continue.
 run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
@@ -6,8 +8,7 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
   if(!is.list(file_specs)||!length(file_specs)) stop("Supply a nonempty list of file specifications.")
   if(!is.character(output_dir)||length(output_dir)!=1||is.na(output_dir)||!nzchar(output_dir)) stop("Set output_dir.")
   if(!dir.exists(output_dir)&&!dir.create(output_dir,recursive = TRUE)) stop("Cannot create output_dir.")
-  batch <- tempfile("batch-",tmpdir = output_dir)
-  if(!dir.create(batch)) stop("Cannot create batch directory.")
+  batch <- new_scan_directory(output_dir)
   # Explicit opt-in covers the built-in filename/metadata/summary/history payloads
   # for these selected files. It is not authorization for arbitrary directories.
   names_only <- vapply(file_specs,function(s) {

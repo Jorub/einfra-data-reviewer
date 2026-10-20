@@ -2,6 +2,11 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Human-readable linked run folders
+
+- Use a single random scan identifier across scan-<id>, review-<id> and numbered rerun-<id>-01 folders. Repeated reviews and refreshed scan revisions receive numbered suffixes, never overwrite prior runs, and keep explicit parent/scan identity in run-lineage.json.
+- Keep existing legacy batch/retry folders usable without renaming them. Adopt their saved label for newly linked stages. No scientific checks or model settings changed.
+
 ## 2026-10-20 — Audit scan and review reliability
 
 - Block new scans before reading values when ncdf4, CFtime or jsonlite is unavailable. Previously a missing calendar package allowed expensive scans whose temporal coverage remained unchecked.

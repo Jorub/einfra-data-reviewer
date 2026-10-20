@@ -4,7 +4,7 @@ source("source/reviewer.R")
 source("source/review_saved.R")
 
 # Configuration ---------------------------------------------------------------
-scan_dir <- ""                          # saved batch-* folder, not a data directory
+scan_dir <- ""                          # saved scan-* folder (or legacy batch-*), not a data directory
 output_dir <- "output"
 credentials_file <- path.expand("~/.config/einfra-data-reviewer/credentials.R")
 model <- "thinker"

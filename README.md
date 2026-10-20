@@ -47,7 +47,7 @@ Choose a runner, edit its configuration, then run it from the top:
 - `run_experiments/scan_file.R`: one explicitly configured file.
 - `run_experiments/scan_temperature.R`: discover the temperature folder, including raw/processed subfolders; excludes hidden entries and symlinks.
 
-Scans read all time layers sequentially and checkpoint a random `batch-*` folder after each file. Daily/hourly files may take substantial time. No model is called during this stage. New scans check ncdf4, CFtime and jsonlite before starting; missing prerequisites stop with setup instructions instead of completing an expensive scan without time checks.
+Scans read all time layers sequentially and checkpoint a `scan-<id>` folder with one random identifier after each file. Daily/hourly files may take substantial time. No model is called during this stage. New scans check ncdf4, CFtime and jsonlite before starting; missing prerequisites stop with setup instructions instead of completing an expensive scan without time checks.
 
 Each batch includes **`data_overview.csv`**, one row per requested input, including unreadable/missing files. It contains the table path and resolved input path, variable, units, mean/min/max, grid endpoints/extents/spacing/counts, layer count, time coverage and missing-period count. `recorded_operations` retains the included redacted history (possibly multiline), without inferring a complete recipe. File size/mtime, scan time and scanner version are included; exact scanner-file checksums are stored in each `scan-record.json`. Source size/mtime before and after the scan are recorded; they are not content hashes.
 
@@ -61,13 +61,13 @@ An unsupported or malformed file may have fewer diagnostics; missing values do n
 
 ## 2. Review saved scans
 
-Open `run_experiments/review_scans.R`. Set `scan_dir` to the saved `batch-*` directory containing `review_index.csv`. This also accepts old no-API batches. It uses cached checks, without opening source files or verifying whether they have changed. Use a fresh scan after changing input data or checker logic; old caches cannot acquire new statistics by asking the model again.
+Open `run_experiments/review_scans.R`. Set `scan_dir` to the saved `scan-<id>` directory containing `review_index.csv`. This also accepts old no-API `batch-*` folders without renaming them; new descendants adopt that saved label. It uses cached checks, without opening source files or verifying whether they have changed. Use a fresh scan after changing input data or checker logic; old caches cannot acquire new statistics by asking the model again.
 
 With `send_to_api = FALSE`, the script saves updated previews without calling the service. Inspect them, then explicitly enable submission with TRUE. Selecting TRUE approves the built-in basename, selected metadata, diagnostics and redacted-history payloads for the selected cached files; raw arrays and input paths are not automatically submitted. Redaction is best-effort, not a privacy guarantee. Do not submit confidential filenames or notes.
 
 The model/effort/token/input-size settings are visible at the top. Each saved-scan review prints its effective model/budget and saves review-settings.json before any calls, so an edited but unsourced runner cannot be mistaken for the applied configuration. Existing budgets remain unchanged: default 8192 completion tokens, 64 kB input guard, 180-second API timeout and 20-second connection timeout. Completion budgets can include reasoning. `reasoning_effort = NULL` omits that field and uses the provider default; explicit support is model-dependent. Timeout/resource changes and parallel execution are separate future choices, not bundled into the restructure.
 
-Reviews create a new random `batch-*` folder; original scans remain unchanged. Already completed reviews are retained without repeating calls. Per-file errors do not stop the next file.
+Reviews reuse the scan identifier: `scan-abc123` produces `review-abc123`. Repeated reviews use `review-abc123-02`, `-03`, etc.; original scans/reviews remain unchanged. Each top-level run saves run-lineage.json linking its scan identifier and exact parent folder. Already completed reviews are retained without repeating calls. Per-file errors do not stop the next file.
 
 ### Credentials
 
@@ -88,7 +88,7 @@ The deterministic `data_overview.csv` is copied forward unchanged when present; 
 
 Older previews may contain `seltimestep,1[PATH REDACTED]` instead of `seltimestep,1/20`. The current sanitizer preserves complete numeric CDO argument ranges while still redacting paths. Lost text cannot be reconstructed from the old preview.
 
-Use `run_experiments/refresh_scan_history.R`: set `scan_dir` to the existing scan batch and optionally select `input_rows`. It opens original NetCDF headers to refresh only the included processing history, reuses numerical diagnostics, and writes a new random `batch-*` folder. No value scan, API call or credentials are needed. Original reports remain untouched. Selected refreshed rows are marked NOT_RUN so old model interpretations are not treated as current; inspect the corrected preview before pointing `review_scans.R` at the new folder.
+Use `run_experiments/refresh_scan_history.R`: set `scan_dir` to the existing scan batch and optionally select `input_rows`. It opens original NetCDF headers to refresh only the included processing history, reuses numerical diagnostics, and writes a numbered scan revision such as `scan-abc123-02` with the same identifier. No value scan, API call or credentials are needed. Original reports remain untouched. Selected refreshed rows are marked NOT_RUN so old model interpretations are not treated as current; inspect the corrected preview before pointing `review_scans.R` at the new folder.
 
 This requires cached stable source size/mtime records and the original input paths. A missing/changed file or failed refresh is recorded as PREPARATION_ERROR and excluded from initial submission. Size/mtime checks are not content checksums; if file identity is uncertain, do a fresh scan. Absent/withheld history is not automatically introduced into the payload. Statistics are retained unchanged; included history, history-derived conversion exports and overview operations are regenerated.
 
@@ -96,7 +96,7 @@ This requires cached stable source size/mtime records and the original input pat
 
 Use `run_experiments/rerun_reviews.R`, selecting the latest batch/rerun folder and explicit statuses. This works with existing cached reports in their original locations. Default: TOKEN_LIMIT only, once at twice the previous budget up to 16384. Optional same-budget-first retry; API errors, when explicitly selected, retry at their original budget. No unbounded automatic retries. Completed calls are not repeated.
 
-Each `rerun-*` keeps the original results unchanged and saves an updated full index, short summary, flagged rows and `attempts.csv` (budgets, completion/reasoning/prompt tokens and finish reasons). Older budget inference and maximum settings are described in the runner. Recorded relative paths assume the original project-root working directory; moving report directories is not supported automatically.
+Retries reuse the scan identifier and are always numbered, for example `rerun-abc123-01` and `rerun-abc123-02`. Each retry keeps the original results unchanged and saves an updated full index, short summary, flagged rows and `attempts.csv` (budgets, completion/reasoning/prompt tokens and finish reasons). Older budget inference and maximum settings are described in the runner. Recorded relative paths assume the original project-root working directory; moving report directories is not supported automatically.
 
 ## Other runners
 

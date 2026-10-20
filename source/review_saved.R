@@ -1,3 +1,5 @@
+source("source/run_paths.R")
+
 # Saved scans -----------------------------------------------------------------
 read_saved_checks <- function(report_path) {
   cache <- file.path(report_path, "local-diagnostics.rds")
@@ -17,7 +19,7 @@ review_saved_scans <- function(scan_dir, output_dir, model = "thinker", max_toke
   if (!all(required %in% names(index))) stop("Unsupported saved scan index schema.")
   if (!nzchar(output_dir)) stop("Set output_dir.")
   if (!dir.exists(output_dir) && !dir.create(output_dir, recursive = TRUE)) stop("Cannot create output directory.")
-  run <- tempfile("batch-", tmpdir = output_dir); dir.create(run)
+  run <- linked_run_directory(scan_dir, output_dir, "review")
   index$source_report_path <- index$report_path
   # Failed initial calls belong in rerun_reviews.R; do not repeat completed reviews.
   selected <- which(index$checks_status == "COMPLETED" & index$llm_status %in%

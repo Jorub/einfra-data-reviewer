@@ -1,3 +1,5 @@
+source("source/run_paths.R")
+
 # Refresh history from headers, retaining cached numeric diagnostics -----------
 refresh_history_checks <- function(checks, input_path) {
   evidence <- attr(checks, "review_evidence")
@@ -37,7 +39,7 @@ refresh_saved_history <- function(scan_dir, output_dir, input_rows = NULL) {
       any(input_rows < 1 | input_rows > nrow(index))) stop("input_rows must be valid index row numbers.")
   if (!nzchar(output_dir)) stop("Set output_dir.")
   if (!dir.exists(output_dir) && !dir.create(output_dir, recursive = TRUE)) stop("Cannot create output directory.")
-  run <- tempfile("batch-", tmpdir = output_dir); dir.create(run)
+  run <- linked_run_directory(scan_dir, output_dir, "scan")
   overview_file <- file.path(scan_dir, "data_overview.csv")
   overview <- if (file.exists(overview_file)) read.csv(overview_file, stringsAsFactors = FALSE, check.names = FALSE) else NULL
   if (!is.null(overview) && nrow(overview) != nrow(index)) stop("Overview/index row mismatch; cannot safely refresh.")
