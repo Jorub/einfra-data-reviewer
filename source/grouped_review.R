@@ -2,7 +2,7 @@
 grouped_check_names <- function() c("variable_and_metadata", "grid_and_spatial_coverage",
   "time_coverage", "variable_values", "source_and_processing")
 
-# Binary screening overview; full statuses and explanations stay in summary.csv.
+# Compact overview using exactly the same result labels as summary.csv.
 grouped_short_summary <- function(summary) {
   required <- c("data_file_path", "check_group", "result")
   if (!all(required %in% names(summary))) stop("Expected a grouped-review summary.csv.")
@@ -12,8 +12,10 @@ grouped_short_summary <- function(summary) {
   overview <- data.frame(data_file_path = unique(summary$data_file_path), stringsAsFactors = FALSE)
   for (group in grouped_check_names()) {
     overview[[group]] <- vapply(overview$data_file_path, function(path) {
-      results <- summary$result[summary$data_file_path == path & summary$check_group == group]
-      if (length(results) && all(results == "PASS")) "PASS" else "FAIL"
+      results <- unique(summary$result[summary$data_file_path == path & summary$check_group == group])
+      if (length(results) > 1)
+        stop("Conflicting results for the same data_file_path/check_group; inspect summary.csv.")
+      if (length(results)) results else "NOT_CHECKED"
     }, character(1))
   }
   overview

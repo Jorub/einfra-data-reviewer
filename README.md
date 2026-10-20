@@ -99,7 +99,7 @@ The pilot starts at the current experiment's **20,000 completion tokens**, with 
 Pilot outputs use a separate numbered `review-<scan-id>` folder:
 
 - `summary.csv`: **`data_file_path,check_group,result,finding,next_action`**, five rows per selected file, with no overall verdict.
-- `summary_short.csv`: one row per `data_file_path`, followed by the five check-group columns containing only PASS/FAIL. Only PASS remains PASS; REVIEW, NOT_CHECKED and missing categories map to FAIL, meaning the category needs attention or has not passed. These screening flags do not replace the full statuses or prove a numerical error. Repeated identical paths collapse conservatively; different full paths stay separate.
+- `summary_short.csv`: one row per `data_file_path`, followed by the five check-group columns preserving exactly the detailed summary's PASS, FAIL, REVIEW or NOT_CHECKED labels. Missing categories are NOT_CHECKED. Identical repeated results collapse; conflicting results for the same path/category require inspection instead of silently changing their meaning. Different full paths stay separate.
 - `flagged_files.csv`: the non-PASS category rows.
 - `pilot_index.csv`: API/preparation/schema completion status per selected file; a known deterministic failure can remain FAIL even if the LLM call failed. Preview-only rows are not completed model assessments.
 - Each file retains `group-results.csv`, a readable `review.md`, the submitted prompt, cached pilot checks and model response/usage metadata. A transport-complete response can still be INVALID_RESPONSE if its five-category JSON is invalid; use `pilot_index.csv` for assessment completion.

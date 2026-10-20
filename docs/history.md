@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Consistent compact and detailed verdict labels
+
+- Preserve PASS, FAIL, REVIEW and NOT_CHECKED in summary_short.csv exactly as in summary.csv. Replace the earlier binary screening mapping that made concerns and unfinished assessments look like established failures. Keep the one-file/five-category layout.
+- Existing reviews can regenerate the compact table locally without API calls or changes to detailed results. Missing categories remain NOT_CHECKED; identical duplicate results collapse, while conflicting duplicate verdicts are reported rather than silently reinterpreted.
+- Regression coverage verifies all four labels, incomplete calls, missing groups, duplicate handling and unchanged detailed summaries during regeneration.
+
 ## 2026-10-20 — Configurable grouped-review timeouts
 
 - After a failed server request elapsed 180.024 seconds at the configured 180-second ceiling, expose request_timeout and connection_timeout at the top of both grouped runners. Use the agreed 600-second request limit and unchanged 20-second connection limit, passing both explicitly to curl and recording the applied settings in run/attempt metadata.

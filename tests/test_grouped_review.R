@@ -79,16 +79,21 @@ stopifnot(settings$request_timeout == 420, settings$connection_timeout == 20)
 summary <- read.csv(file.path(trial$run_dir, "summary.csv"))
 short <- read.csv(file.path(trial$run_dir, "summary_short.csv"))
 stopifnot(nrow(short) == 3, identical(names(short), c("data_file_path", grouped_check_names())),
-  all(short[1, -1] == "FAIL"), all(short[3, -1] == "FAIL"),
+  all(short[1, -1] == "NOT_CHECKED"), all(short[3, -1] == "NOT_CHECKED"),
   all(short[2, 2:5] == "PASS"), short$source_and_processing[2] == "FAIL")
-# REVIEW and unperformed/missing groups cannot become a binary PASS; duplicates
-# of the same file collapse conservatively, preserving full path identity.
+# Preserve all four labels exactly; absent categories remain NOT_CHECKED.
 mixed <- summary[summary$data_file_path == "/fake/2.nc", ]
 mixed$result[1] <- "REVIEW"
-mixed <- rbind(mixed, transform(mixed[2, ], result = "NOT_CHECKED"))
+mixed$result[2] <- "NOT_CHECKED"
+mixed <- rbind(mixed, mixed[2, ])
 mixed <- mixed[mixed$check_group != "time_coverage", ]
-binary <- grouped_short_summary(mixed)
-stopifnot(nrow(binary) == 1, all(binary[1, 2:4] == "FAIL"), binary$variable_values == "PASS")
+compact <- grouped_short_summary(mixed)
+stopifnot(nrow(compact) == 1, compact$variable_and_metadata == "REVIEW",
+  compact$grid_and_spatial_coverage == "NOT_CHECKED", compact$time_coverage == "NOT_CHECKED",
+  compact$variable_values == "PASS", compact$source_and_processing == "FAIL")
+# Do not silently reinterpret conflicting repeated rows as a different verdict.
+conflicting <- rbind(mixed, transform(mixed[1, ], result = "FAIL"))
+stopifnot(inherits(try(grouped_short_summary(conflicting), silent = TRUE), "try-error"))
 before_summary <- tools::md5sum(file.path(trial$run_dir, "summary.csv"))
 unlink(file.path(trial$run_dir, "summary_short.csv"))
 write_grouped_short_summary(trial$run_dir)
