@@ -36,7 +36,12 @@ review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) 
 }
 # Classify known curl conditions using fixed labels, never raw error text.
 connection_error_summary <- function(error) {
-  category <- if (inherits(error, "curl_error_operation_timedout")) "TIMEOUT" else
+  # Older curl versions may expose only a simpleError; inspect timeout wording
+  # locally and emit a fixed label, never the original message.
+  message <- conditionMessage(error)
+  timed_out <- inherits(error, "curl_error_operation_timedout") ||
+    grepl("timed out|timeout was reached|operation timeout", message, ignore.case = TRUE)
+  category <- if (timed_out) "TIMEOUT" else
     if (inherits(error, c("curl_error_couldnt_resolve_host", "curl_error_couldnt_resolve_proxy"))) "DNS_ERROR" else
     if (inherits(error, "curl_error_couldnt_connect")) "CONNECT_ERROR" else
     if (inherits(error, c("curl_error_ssl_connect_error", "curl_error_peer_failed_verification", "curl_error_ssl_certproblem"))) "TLS_ERROR" else
@@ -44,10 +49,17 @@ connection_error_summary <- function(error) {
     "UNKNOWN_TRANSPORT_ERROR"
   paste0("API connection failed [", category, "]; raw details suppressed to protect credentials.")
 }
-api_request <- function(route, payload = NULL) {
+validate_api_timeouts <- function(request_timeout, connection_timeout) {
+  valid <- function(x) is.numeric(x) && length(x) == 1 && is.finite(x) && x > 0
+  if (!valid(request_timeout) || !valid(connection_timeout))
+    stop("request_timeout and connection_timeout must be positive finite seconds.")
+  invisible(NULL)
+}
+api_request <- function(route, payload = NULL, request_timeout = 180, connection_timeout = 20) {
+  validate_api_timeouts(request_timeout, connection_timeout)
   if (!route %in% c("/models", "/chat/completions")) stop("Unsupported API route.")
   if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Load private credentials with set_api_key() first.")
-  h <- curl::new_handle(timeout = 180, connecttimeout = 20)
+  h <- curl::new_handle(timeout = request_timeout, connecttimeout = connection_timeout)
   curl::handle_setheaders(h, Authorization = paste("Bearer", .einfra$key),
                          "Content-Type" = "application/json")
   if (!is.null(payload)) curl::handle_setopt(h, postfields = jsonlite::toJSON(

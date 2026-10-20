@@ -121,8 +121,10 @@ guard_grouped_results <- function(checks, results = NULL) {
 # Selected-file or full-batch review using cached evidence; no NetCDF reads.
 run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "thinker", max_tokens = 20000L,
                               reasoning_effort = NULL, max_input_bytes = 64000L,
-                              prompt_file = "docs/grouped-review-prompt.md", send_to_api = FALSE) {
+                              prompt_file = "docs/grouped-review-prompt.md", send_to_api = FALSE,
+                              request_timeout = 600, connection_timeout = 20) {
   validate_completion_budget(max_tokens)
+  validate_api_timeouts(request_timeout, connection_timeout)
   index_file <- file.path(scan_dir, "review_index.csv")
   if (!file.exists(index_file)) stop("Set scan_dir to the saved scan folder containing review_index.csv.")
   source_index <- read.csv(index_file, stringsAsFactors = FALSE)
@@ -153,10 +155,12 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
     }
   }
   jsonlite::write_json(list(prompt_version = "grouped-review-pilot-v1", model = model, max_tokens = max_tokens,
+    request_timeout = request_timeout, connection_timeout = connection_timeout,
     reasoning_effort = reasoning_effort, input_rows = selected, send_to_api = send_to_api),
     file.path(run, "pilot-settings.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
   message("Grouped pilot: model=", model, "; max_tokens=", max_tokens, "; files=", length(selected),
-    "; send_to_api=", send_to_api)
+    "; request_timeout=", request_timeout, "s; connection_timeout=", connection_timeout,
+    "s; send_to_api=", send_to_api)
   checkpoint()
   for (j in seq_along(selected)) {
     directory <- file.path(run, sprintf("file-%03d", selected[j])); dir.create(directory)
@@ -170,7 +174,8 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
       saveRDS(checks, file.path(directory, "pilot-checks.rds"))
       if (send_to_api) {
         answer <- ask_llm(prompt, model = model, output_dir = directory, approved_prompt = prompt,
-          send = TRUE, max_tokens = max_tokens, reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes)
+          send = TRUE, max_tokens = max_tokens, reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes,
+          request_timeout = request_timeout, connection_timeout = connection_timeout)
         results <- parse_grouped_response(answer$text)
         index$llm_status[j] <- if (is.null(results)) "INVALID_RESPONSE" else "COMPLETED"
         index$reason[j] <- if (is.null(results)) "Response did not match the five-group schema." else "Five-group assessment completed."

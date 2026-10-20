@@ -8,13 +8,15 @@ e <- read_prompt_evidence(f)
 stopifnot(grepl("synthetic source",e,fixed = TRUE),!grepl(f,e,fixed = TRUE))
 stopifnot(inherits(try(read_prompt_evidence(f,max_bytes = 1),silent = TRUE),"try-error"));unlink(f)
 out <- tempfile();dir.create(out)
-api_request <- function(route,payload) {
+api_request <- function(route,payload, request_timeout, connection_timeout) {
  stopifnot(!"reasoning_effort" %in% names(payload),payload$max_tokens==8192L)
+ stopifnot(request_timeout == 600, connection_timeout == 20)
  list(model = "mock",choices = list(list(finish_reason = "stop",message = list(content = "# Synthetic answer\nDone."))),usage = list(total_tokens = 10))
 }
-a <- ask_llm(p,"mock",out,approved_prompt = p,send = TRUE)
-stopifnot(file.exists(file.path(a$run_dir,"response.md")),a$metadata$complete)
-stopifnot(!anyDuplicated(c(a$run_dir,ask_llm(p,"mock",out,approved_prompt = p,send = TRUE)$run_dir)))
+a <- ask_llm(p,"mock",out,approved_prompt = p,send = TRUE, request_timeout = 600)
+stopifnot(file.exists(file.path(a$run_dir,"response.md")),a$metadata$complete,
+  a$metadata$request_timeout == 600, a$metadata$connection_timeout == 20)
+stopifnot(!anyDuplicated(c(a$run_dir,ask_llm(p,"mock",out,approved_prompt = p,send = TRUE, request_timeout = 600)$run_dir)))
 stopifnot(inherits(try(ask_llm(p,"mock",out,approved_prompt = "changed",send = TRUE),silent = TRUE),"try-error"))
 for(mode in c("length","empty","error")) {
  api_request <- local({m<-mode;function(...) {
@@ -41,5 +43,11 @@ for (i in seq_along(classes)) {
  stopifnot(grepl(paste0("[", labels[i], "]"), diagnostic, fixed = TRUE),
    !grepl("FAKE_PRIVATE_SENTINEL", diagnostic, fixed = TRUE), !grepl("private.invalid", diagnostic, fixed = TRUE))
 }
+# Older curl errors may lack typed classes; inspect locally without disclosing text.
+legacy <- simpleError("Timeout was reached: FAKE_PRIVATE_SENTINEL after 180000 milliseconds")
+diagnostic <- connection_error_summary(legacy)
+stopifnot(grepl("[TIMEOUT]", diagnostic, fixed = TRUE), !grepl("FAKE_PRIVATE_SENTINEL", diagnostic, fixed = TRUE))
+for (invalid in list(0, -1, NA_real_, Inf, "600", numeric()))
+  stopifnot(inherits(try(validate_api_timeouts(invalid, 20), silent = TRUE), "try-error"))
 unlink(out,recursive = TRUE)
 cat("Direct LLM tests passed: prompt building, text-only evidence, approval, request shape, Markdown output, unique runs and incomplete/error handling. No API calls.\n")

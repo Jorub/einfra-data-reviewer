@@ -25,7 +25,8 @@ read_prompt_evidence <- function(files, max_bytes = 24000L) {
 }
 ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
                     max_tokens = 8192L, reasoning_effort = NULL,
-                    max_input_bytes = 24000L) {
+                    max_input_bytes = 24000L, request_timeout = 180, connection_timeout = 20) {
+  validate_api_timeouts(request_timeout, connection_timeout)
   if(!is.character(prompt)||length(prompt)!=1||is.na(prompt)||!nzchar(trimws(prompt))) stop("Supply a nonempty text prompt.")
   if(!isTRUE(send)||!identical(as.character(approved_prompt),as.character(prompt)))
     stop("Inspect the exact prompt and explicitly approve it with send = TRUE.")
@@ -43,6 +44,7 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   writeLines(enc2utf8(prompt),file.path(run,"prompt.md"),useBytes = TRUE)
   started <- proc.time()[["elapsed"]]
   meta <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
+    request_timeout = request_timeout, connection_timeout = connection_timeout,
     max_tokens = max_tokens,input_bytes = nchar(prompt,type = "bytes"),usage = NULL,
     finish_reason = NULL,status = "NOT_COMPLETED",complete = FALSE,
     started_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
@@ -50,7 +52,8 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
     auto_unbox = TRUE,pretty = TRUE,null = "null")
   save_meta()
   response <- tryCatch(api_request("/chat/completions",
-    review_request(model,prompt,max_tokens,reasoning_effort)),error = function(e) {
+    review_request(model,prompt,max_tokens,reasoning_effort),
+    request_timeout = request_timeout, connection_timeout = connection_timeout),error = function(e) {
       # The handler has its own scope: persist its updated object explicitly.
       failed_meta <- meta
       failed_meta$status <- "API_ERROR"

@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Configurable grouped-review timeouts
+
+- After a failed server request elapsed 180.024 seconds at the configured 180-second ceiling, expose request_timeout and connection_timeout at the top of both grouped runners. Use the agreed 600-second request limit and unchanged 20-second connection limit, passing both explicitly to curl and recording the applied settings in run/attempt metadata.
+- Preserve 20,000-token grouped budgets, reasoning settings and legacy reviewer defaults. A response returns as soon as available; increasing the waiting limit is independent of increasing token budgets. First validate on BESS alone before a full retry.
+- Recognize timeout wording locally when older curl versions lack a typed condition, emitting only a fixed TIMEOUT label. Test timeout validation/propagation/metadata, legacy error privacy and existing error isolation without live model calls.
+
 ## 2026-10-20 — Reliable API-failure status and safe transport diagnostics
 
 - Correct direct/grouped review error metadata that remained NOT_COMPLETED: the error handler updated a local object while the writer read the enclosing unchanged object. Persist the updated error metadata explicitly as API_ERROR, with completion time and elapsed seconds.
