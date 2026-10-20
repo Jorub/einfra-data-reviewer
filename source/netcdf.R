@@ -31,9 +31,22 @@ sanitize_history <- function(text, max_chars = 6000L) {
   text <- gsub("(?i)\\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]+", "[REDACTED]", text, perl = TRUE)
   text <- gsub("https?://[^\\s\"']+", "[URL REDACTED]", text, perl = TRUE)
   text <- gsub("[^\\s\"']+@[^\\s\"']+", "[IDENTITY REDACTED]", text, perl = TRUE)
+  # Protect only complete numeric CDO argument tokens, not arbitrary slash text.
+  # Example: seltimestep,1/20 is a range; remapnn,/private/grid is a path.
+  number <- "[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+  argument <- paste0(number, "(?:/", number, "){0,2}")
+  operator <- paste0("(?<![[:alnum:]_./\\\\-])-?[A-Za-z][A-Za-z0-9_-]*,", argument,
+    "(?:,", argument, ")*(?=$|[[:space:]\"';)])")
+  marker <- "__CDO_NUMERIC_RANGE_SLASH__"
+  while (grepl(marker, text, fixed = TRUE)) marker <- paste0(marker, "X")
+  locations <- gregexpr(operator, text, perl = TRUE)
+  regmatches(text, locations) <- lapply(regmatches(text, locations), function(tokens)
+    gsub("/", marker, tokens, fixed = TRUE))
   # Absolute, home-relative, relative-with-slash and Windows paths. Keep CDO operators.
   text <- gsub("(?:[A-Za-z]:[\\\\/]|~/|/|\\.\\.?/)[^\\s\"']+", "[PATH REDACTED]", text, perl = TRUE)
+  text <- gsub(marker, "/", text, fixed = TRUE)
   list(text = substr(text, 1L, max_chars), truncated = nchar(text) > max_chars,
+       sanitizer_version = "cdo-numeric-ranges-v2",
        redacted = TRUE,
        note = "Common paths/credentials/URLs redacted automatically; not a guarantee. Inspect preview. History records operations, not proof that processing was correct.")
 }

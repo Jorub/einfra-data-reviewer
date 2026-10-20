@@ -84,6 +84,14 @@ Keys are read only when API calls are enabled, held in R memory and never intent
 
 The deterministic `data_overview.csv` is copied forward unchanged when present; model conclusions do not modify statistics. FAIL includes strict provenance/naming flags, not only incorrect numerical values. A known deterministic failure remains FAIL even if the LLM is unfinished. Scan-only summary rows cannot constitute a completed LLM review.
 
+## Repair old redacted history without a value scan
+
+Older previews may contain `seltimestep,1[PATH REDACTED]` instead of `seltimestep,1/20`. The current sanitizer preserves complete numeric CDO argument ranges while still redacting paths. Lost text cannot be reconstructed from the old preview.
+
+Use `run_experiments/refresh_scan_history.R`: set `scan_dir` to the existing scan batch and optionally select `input_rows`. It opens original NetCDF headers to refresh only the included processing history, reuses numerical diagnostics, and writes a new random `batch-*` folder. No value scan, API call or credentials are needed. Original reports remain untouched. Selected refreshed rows are marked NOT_RUN so old model interpretations are not treated as current; inspect the corrected preview before pointing `review_scans.R` at the new folder.
+
+This requires cached stable source size/mtime records and the original input paths. A missing/changed file or failed refresh is recorded as PREPARATION_ERROR and excluded from initial submission. Size/mtime checks are not content checksums; if file identity is uncertain, do a fresh scan. Absent/withheld history is not automatically introduced into the payload. Statistics are retained unchanged; included history, history-derived conversion exports and overview operations are regenerated.
+
 ## Retry unfinished model calls
 
 Use `run_experiments/rerun_reviews.R`, selecting the latest batch/rerun folder and explicit statuses. This works with existing cached reports in their original locations. Default: TOKEN_LIMIT only, once at twice the previous budget up to 16384. Optional same-budget-first retry; API errors, when explicitly selected, retry at their original budget. No unbounded automatic retries. Completed calls are not repeated.

@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Preserve numeric CDO ranges in redacted history
+
+- Fix path redaction that changed seltimestep,1/20 into a misleading single-timestep operation. Protect complete numeric CDO argument tokens while continuing to redact file paths and credentials; record sanitizer version in included history.
+- Add a header-only refresh runner for saved diagnostics. Preserve original reports and cached statistics, regenerate corrected previews/history-derived exports in a new batch, and invalidate previous model conclusions for refreshed rows. Block source size/mtime mismatches and refresh failures before submission.
+- Regression coverage checks numeric/stepped ranges, privacy redaction, unchanged scan values and original caches, no rescan/API calls, and refusal to refresh changed source files.
+
 ## 2026-10-19 — Input-table whitespace
 
 - Trim surrounding whitespace from the optional variable-category field when reading the CSV. Whitespace-only categories are treated as unspecified, allowing inference. Preserve file paths and provenance text unchanged. Regression coverage includes quoted whitespace from spreadsheet-style exports.
