@@ -118,8 +118,8 @@ guard_grouped_results <- function(checks, results = NULL) {
   results
 }
 
-# Explicit selected-file experiment using cached evidence; no NetCDF reads.
-run_grouped_pilot <- function(scan_dir, output_dir, input_rows, model = "thinker", max_tokens = 20000L,
+# Selected-file or full-batch review using cached evidence; no NetCDF reads.
+run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "thinker", max_tokens = 20000L,
                               reasoning_effort = NULL, max_input_bytes = 64000L,
                               prompt_file = "docs/grouped-review-prompt.md", send_to_api = FALSE) {
   validate_completion_budget(max_tokens)
@@ -127,6 +127,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows, model = "thinker
   if (!file.exists(index_file)) stop("Set scan_dir to the saved scan folder containing review_index.csv.")
   source_index <- read.csv(index_file, stringsAsFactors = FALSE)
   if (!all(c("filename", "report_path", "checks_status") %in% names(source_index))) stop("Unsupported scan index.")
+  if (is.null(input_rows)) input_rows <- seq_len(nrow(source_index))
   if (!length(input_rows) || !is.numeric(input_rows) || anyNA(input_rows) ||
       any(input_rows != as.integer(input_rows)) || any(input_rows < 1 | input_rows > nrow(source_index)))
     stop("Select valid input_rows from the saved index.")

@@ -2,6 +2,11 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Full paper-input grouped review
+
+- Add a configured grouped-review runner for every row in the saved paper-input scan. NULL input_rows selects the full index, while explicit pilot subsets remain supported. Preserve the selected model, 20,000-token budget, sequential calls and per-file error continuation.
+- Produce detailed and compact category summaries without reopening source data. Original scans/reviews remain intact; the full run reassesses all selected rows rather than silently omitting prior pilot files or failed inputs. No additional server discovery or live model execution was performed during development.
+
 ## 2026-10-20 — Compact category screening overview
 
 - Add summary_short.csv with one row per full data_file_path and five PASS/FAIL category columns, derived in R from the detailed grouped results without another model call. Only PASS maps to PASS; REVIEW, NOT_CHECKED and absent categories map to FAIL as screening flags requiring attention, with original meanings/explanations retained in summary.csv.

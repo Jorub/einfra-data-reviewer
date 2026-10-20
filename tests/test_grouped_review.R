@@ -62,8 +62,8 @@ before <- tools::md5sum(file.path(scan, "review_index.csv"))
 check_netcdf <- function(...) stop("Unexpected rescan")
 api_calls <- 0L
 api_request <- function(...) stop("No API allowed in preview")
-preview <- run_grouped_pilot(scan, work, 1:3, send_to_api = FALSE)
-stopifnot(all(preview$index$llm_status == "NOT_RUN"))
+preview <- run_grouped_pilot(scan, work, input_rows = NULL, send_to_api = FALSE)
+stopifnot(all(preview$index$llm_status == "NOT_RUN"), identical(preview$index$input_row, 1:3))
 api_request <- function(route, payload) {
   api_calls <<- api_calls + 1L
   stopifnot(payload$max_tokens == 20000L)
@@ -73,7 +73,7 @@ api_request <- function(route, payload) {
   list(model = "fake", choices = list(list(finish_reason = "stop", message = list(content = content))),
     usage = list(completion_tokens = 100))
 }
-trial <- run_grouped_pilot(scan, work, 1:3, model = "fake", send_to_api = TRUE)
+trial <- run_grouped_pilot(scan, work, model = "fake", send_to_api = TRUE)
 summary <- read.csv(file.path(trial$run_dir, "summary.csv"))
 short <- read.csv(file.path(trial$run_dir, "summary_short.csv"))
 stopifnot(nrow(short) == 3, identical(names(short), c("data_file_path", grouped_check_names())),
