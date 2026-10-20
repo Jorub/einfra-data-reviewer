@@ -47,6 +47,10 @@ for (i in seq_along(classes)) {
 legacy <- simpleError("Timeout was reached: FAKE_PRIVATE_SENTINEL after 180000 milliseconds")
 diagnostic <- connection_error_summary(legacy)
 stopifnot(grepl("[TIMEOUT]", diagnostic, fixed = TRUE), !grepl("FAKE_PRIVATE_SENTINEL", diagnostic, fixed = TRUE))
+# curl's asynchronous failure callback can pass a typed character string.
+typed <- structure("FAKE_PRIVATE_SENTINEL", class = c("curl_error_operation_timedout", "curl_error", "character"))
+stopifnot(grepl("[TIMEOUT]", connection_error_summary(typed), fixed = TRUE),
+  !grepl("FAKE_PRIVATE_SENTINEL", connection_error_summary(typed), fixed = TRUE))
 for (invalid in list(0, -1, NA_real_, Inf, "600", numeric()))
   stopifnot(inherits(try(validate_api_timeouts(invalid, 20), silent = TRUE), "try-error"))
 unlink(out,recursive = TRUE)

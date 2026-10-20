@@ -120,13 +120,25 @@ guard_grouped_results <- function(checks, results = NULL) {
   results
 }
 
+validate_review_concurrency <- function(max_concurrent_requests) {
+  if (!is.numeric(max_concurrent_requests) || length(max_concurrent_requests) != 1 ||
+      !is.finite(max_concurrent_requests) || max_concurrent_requests != floor(max_concurrent_requests) ||
+      max_concurrent_requests < 1 || max_concurrent_requests > 4)
+    stop("max_concurrent_requests must be an integer from 1 to 4 (the per-account API limit).")
+  invisible(NULL)
+}
+grouped_request_pool <- function(limit) curl::new_pool(total_con = limit, host_con = limit)
+poll_grouped_requests <- function(pool) curl::multi_run(timeout = 1, pool = pool)
+cancel_grouped_request <- function(handle) curl::multi_cancel(handle)
+
 # Selected-file or full-batch review using cached evidence; no NetCDF reads.
 run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "thinker", max_tokens = 20000L,
                               reasoning_effort = NULL, max_input_bytes = 64000L,
                               prompt_file = "docs/grouped-review-prompt.md", send_to_api = FALSE,
-                              request_timeout = 600, connection_timeout = 20) {
+                              request_timeout = 600, connection_timeout = 20, max_concurrent_requests = 1L) {
   validate_completion_budget(max_tokens)
   validate_api_timeouts(request_timeout, connection_timeout)
+  validate_review_concurrency(max_concurrent_requests)
   index_file <- file.path(scan_dir, "review_index.csv")
   if (!file.exists(index_file)) stop("Set scan_dir to the saved scan folder containing review_index.csv.")
   source_index <- read.csv(index_file, stringsAsFactors = FALSE)
@@ -145,6 +157,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
   index$input_row <- selected
   index$data_file_path <- if ("input_path" %in% names(source_index)) source_index$input_path[selected] else index$filename
   index$source_report_path <- index$report_path
+  index$report_path <- file.path(run, sprintf("file-%03d", selected))
   index$llm_status <- "NOT_RUN"; index$reason <- "Pilot not submitted."
   summaries <- vector("list", length(selected))
   checkpoint <- function() {
@@ -158,52 +171,97 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
   }
   jsonlite::write_json(list(prompt_version = "grouped-review-pilot-v1", model = model, max_tokens = max_tokens,
     request_timeout = request_timeout, connection_timeout = connection_timeout,
+    max_concurrent_requests = max_concurrent_requests,
     reasoning_effort = reasoning_effort, input_rows = selected, send_to_api = send_to_api),
     file.path(run, "pilot-settings.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
   message("Grouped pilot: model=", model, "; max_tokens=", max_tokens, "; files=", length(selected),
     "; request_timeout=", request_timeout, "s; connection_timeout=", connection_timeout,
-    "s; send_to_api=", send_to_api)
+    "s; max_concurrent_requests=", max_concurrent_requests, "; send_to_api=", send_to_api)
   checkpoint()
-  for (j in seq_along(selected)) {
-    directory <- file.path(run, sprintf("file-%03d", selected[j])); dir.create(directory)
-    results <- NULL; checks <- NULL
-    index$report_path[j] <- directory
-    tryCatch({
-      if (index$checks_status[j] != "COMPLETED") stop("Scan did not complete; inspect the original scan error first.")
-      checks <- grouped_checks(read_saved_checks(index$source_report_path[j]))
-      prompt <- prepare_grouped_review(checks, prompt_file)
-      writeLines(prompt, file.path(directory, "grouped-preview.txt"))
-      saveRDS(checks, file.path(directory, "pilot-checks.rds"))
-      if (send_to_api) {
-        answer <- ask_llm(prompt, model = model, output_dir = directory, approved_prompt = prompt,
-          send = TRUE, max_tokens = max_tokens, reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes,
-          request_timeout = request_timeout, connection_timeout = connection_timeout)
-        results <- parse_grouped_response(answer$text)
-        index$llm_status[j] <- if (is.null(results)) "INVALID_RESPONSE" else "COMPLETED"
-        index$reason[j] <- if (is.null(results)) "Response did not match the five-group schema." else "Five-group assessment completed."
-      }
-    }, error = function(e) {
-      attempts <- list.dirs(directory, recursive = FALSE, full.names = TRUE)
-      metadata <- attempts[file.exists(file.path(attempts, "metadata.json"))]
-      status <- if (length(metadata)) tryCatch(
-        jsonlite::read_json(file.path(metadata[1], "metadata.json"))$status,
-        error = function(e) "PREPARATION_ERROR") else "PREPARATION_ERROR"
-      if (!is.character(status) || length(status) != 1 || is.na(status)) status <- "PREPARATION_ERROR"
-      index$llm_status[j] <<- status
-      index$reason[j] <<- conditionMessage(e)
-    })
+  # All callbacks run in this R process; only this coordinator writes summaries.
+  active <- rep(FALSE, length(selected))
+  handles <- vector("list", length(selected))
+  pool <- if (send_to_api && max_concurrent_requests > 1) grouped_request_pool(max_concurrent_requests) else NULL
+  on.exit({
+    pending <- which(active)
+    for (j in pending) {
+      if (!is.null(handles[[j]])) try(cancel_grouped_request(handles[[j]]), silent = TRUE)
+      index$llm_status[j] <- "INTERRUPTED"
+      index$reason[j] <- "Review interrupted before a result was checkpointed; inspect saved attempt metadata."
+    }
+    if (length(pending)) try(checkpoint(), silent = TRUE)
+  }, add = TRUE)
+  finish_file <- function(j, checks, results = NULL, status, reason) {
+    active[j] <<- FALSE; handles[j] <<- list(NULL)
+    index$llm_status[j] <<- status; index$reason[j] <<- reason
     if (is.null(checks)) results <- data.frame(group = grouped_check_names(), result = "NOT_CHECKED",
       finding = "Saved scan evidence was unavailable for this assessment.",
       next_action = "Inspect pilot_index.csv and resolve the scan/preparation error.", stringsAsFactors = FALSE) else
       results <- guard_grouped_results(checks, results)
-    summaries[[j]] <- data.frame(data_file_path = index$data_file_path[j], check_group = results$group,
+    summaries[[j]] <<- data.frame(data_file_path = index$data_file_path[j], check_group = results$group,
       result = results$result, finding = results$finding, next_action = results$next_action, stringsAsFactors = FALSE)
+    directory <- index$report_path[j]
     write.csv(summaries[[j]], file.path(directory, "group-results.csv"), row.names = FALSE)
     report <- unlist(lapply(seq_len(nrow(results)), function(i) c(
       paste0("## ", gsub("_", " ", results$group[i]), " — ", results$result[i]),
       results$finding[i], paste("Next action:", results$next_action[i]), "")))
     writeLines(report, file.path(directory, "review.md"))
     checkpoint()
+    message("Saved grouped review ", sum(!vapply(summaries, is.null, logical(1))), "/", length(selected),
+      ": ", index$filename[j], " [", status, "]")
+  }
+  launch_file <- function(j) {
+    directory <- index$report_path[j]; dir.create(directory)
+    prepared <- tryCatch({
+      if (index$checks_status[j] != "COMPLETED") stop("Scan did not complete; inspect the original scan error first.")
+      checks <- grouped_checks(read_saved_checks(index$source_report_path[j]))
+      prompt <- prepare_grouped_review(checks, prompt_file)
+      writeLines(prompt, file.path(directory, "grouped-preview.txt"))
+      saveRDS(checks, file.path(directory, "pilot-checks.rds"))
+      list(checks = checks, prompt = prompt)
+    }, error = identity)
+    if (inherits(prepared, "error")) {
+      finish_file(j, NULL, status = "PREPARATION_ERROR", reason = conditionMessage(prepared))
+      return(invisible(NULL))
+    }
+    if (!send_to_api) {
+      finish_file(j, prepared$checks, status = "NOT_RUN", reason = "Pilot not submitted.")
+      return(invisible(NULL))
+    }
+    accept_answer <- function(answer) {
+      if (inherits(answer, "error")) {
+        attempts <- list.dirs(directory, recursive = FALSE, full.names = TRUE)
+        metadata <- attempts[file.exists(file.path(attempts, "metadata.json"))]
+        status <- if (length(metadata)) tryCatch(
+          jsonlite::read_json(file.path(metadata[1], "metadata.json"))$status,
+          error = function(e) "PREPARATION_ERROR") else "PREPARATION_ERROR"
+        if (!is.character(status) || length(status) != 1 || is.na(status)) status <- "PREPARATION_ERROR"
+        finish_file(j, prepared$checks, status = status, reason = conditionMessage(answer))
+      } else {
+        results <- parse_grouped_response(answer$text)
+        finish_file(j, prepared$checks, results = results,
+          status = if (is.null(results)) "INVALID_RESPONSE" else "COMPLETED",
+          reason = if (is.null(results)) "Response did not match the five-group schema." else "Five-group assessment completed.")
+      }
+    }
+    active[j] <<- TRUE
+    index$llm_status[j] <<- "IN_PROGRESS"; index$reason[j] <<- "Model request in progress."
+    checkpoint()
+    answer <- tryCatch(ask_llm(prepared$prompt, model = model, output_dir = directory,
+      approved_prompt = prepared$prompt, send = TRUE, max_tokens = max_tokens,
+      reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes,
+      request_timeout = request_timeout, connection_timeout = connection_timeout,
+      pool = pool, callback = if (!is.null(pool)) accept_answer else NULL), error = identity)
+    if (is.null(pool) || inherits(answer, "error")) accept_answer(answer) else handles[j] <<- list(answer$handle)
+    invisible(NULL)
+  }
+  next_file <- 1L
+  while (next_file <= length(selected) || any(active)) {
+    while (next_file <= length(selected) && sum(active) < max_concurrent_requests) {
+      j <- next_file; next_file <- next_file + 1L
+      launch_file(j)
+    }
+    if (any(active)) poll_grouped_requests(pool)
   }
   message("Grouped pilot saved to ", run, ". Existing reviewer outputs unchanged.")
   invisible(list(index = index, run_dir = run))

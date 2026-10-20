@@ -38,7 +38,8 @@ review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) 
 connection_error_summary <- function(error) {
   # Older curl versions may expose only a simpleError; inspect timeout wording
   # locally and emit a fixed label, never the original message.
-  message <- conditionMessage(error)
+  message <- if (inherits(error, "condition")) conditionMessage(error) else
+    if (is.character(error)) paste(error, collapse = " ") else ""
   timed_out <- inherits(error, "curl_error_operation_timedout") ||
     grepl("timed out|timeout was reached|operation timeout", message, ignore.case = TRUE)
   category <- if (timed_out) "TIMEOUT" else
@@ -55,7 +56,7 @@ validate_api_timeouts <- function(request_timeout, connection_timeout) {
     stop("request_timeout and connection_timeout must be positive finite seconds.")
   invisible(NULL)
 }
-api_request <- function(route, payload = NULL, request_timeout = 180, connection_timeout = 20) {
+api_request_handle <- function(route, payload = NULL, request_timeout = 180, connection_timeout = 20) {
   validate_api_timeouts(request_timeout, connection_timeout)
   if (!route %in% c("/models", "/chat/completions")) stop("Unsupported API route.")
   if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Load private credentials with set_api_key() first.")
@@ -64,11 +65,30 @@ api_request <- function(route, payload = NULL, request_timeout = 180, connection
                          "Content-Type" = "application/json")
   if (!is.null(payload)) curl::handle_setopt(h, postfields = jsonlite::toJSON(
     payload, auto_unbox = TRUE, null = "null"))
-  response <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, route), handle = h),
-    error = function(e) stop(connection_error_summary(e), call. = FALSE))
+  curl::handle_setopt(h, url = paste0(endpoint, route))
+  h
+}
+parse_api_response <- function(response) {
   if (response$status_code != 200L) stop(http_error_summary(response$status_code,response$content),call. = FALSE)
   tryCatch(jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE),
     error = function(e) stop("API returned invalid JSON; body suppressed."))
+}
+api_request <- function(route, payload = NULL, request_timeout = 180, connection_timeout = 20) {
+  h <- api_request_handle(route, payload, request_timeout, connection_timeout)
+  response <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, route), handle = h),
+    error = function(e) stop(connection_error_summary(e), call. = FALSE))
+  parse_api_response(response)
+}
+# One in-process asynchronous request; the grouped coordinator limits active slots.
+api_request_async <- function(route, payload, pool, done, fail, request_timeout = 180, connection_timeout = 20) {
+  h <- api_request_handle(route, payload, request_timeout, connection_timeout)
+  receive <- function(response) {
+    parsed <- tryCatch(parse_api_response(response), error = identity)
+    if (inherits(parsed, "error")) fail(parsed) else done(parsed)
+  }
+  curl::multi_add(h, pool = pool, done = receive,
+    fail = function(error) fail(simpleError(connection_error_summary(error))))
+  h
 }
 list_models <- function() {
   result <- api_request("/models")

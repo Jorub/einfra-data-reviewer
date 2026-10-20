@@ -2,6 +2,13 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Four concurrent saved-scan LLM reviews
+
+- Add max_concurrent_requests (1–4), using the agreed four requests in the full grouped runner and retaining one for pilots/existing function callers. Respect the documented per-account limit; other account activity shares those slots. Keep NetCDF scanning sequential and preserve the 600/20-second timeouts, token budget, scientific prompt and verdict vocabulary.
+- Use curl's in-process asynchronous pool without extra packages, R worker processes or credential copies. Refill available slots, isolate per-file transport/HTTP/token/schema/preparation failures and keep one coordinator writing checkpoints. Preserve input-row identity/order and all detailed/compact outputs as responses finish out of order. No automatic retries are introduced.
+- Save concurrency settings and in-progress status; cancel local active handles on a normal interrupt and retain completed checkpoints. Forced session termination and remote cancellation remain outside the cleanup guarantee.
+- Validate queue width/refill, out-of-order identity, HTTP 429 and other failure continuation, private-payload exclusion, preview-only behaviour, unchanged scans and interruption cleanup with mocked requests. Exercise real curl multi callbacks using only local response files, without network access or credentials.
+
 ## 2026-10-20 — Consistent compact and detailed verdict labels
 
 - Preserve PASS, FAIL, REVIEW and NOT_CHECKED in summary_short.csv exactly as in summary.csv. Replace the earlier binary screening mapping that made concerns and unfinished assessments look like established failures. Keep the one-file/five-category layout.

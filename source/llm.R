@@ -25,8 +25,10 @@ read_prompt_evidence <- function(files, max_bytes = 24000L) {
 }
 ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
                     max_tokens = 8192L, reasoning_effort = NULL,
-                    max_input_bytes = 24000L, request_timeout = 180, connection_timeout = 20) {
+                    max_input_bytes = 24000L, request_timeout = 180, connection_timeout = 20,
+                    pool = NULL, callback = NULL) {
   validate_api_timeouts(request_timeout, connection_timeout)
+  if (!is.null(pool) && !is.function(callback)) stop("Asynchronous requests require a completion callback.")
   if(!is.character(prompt)||length(prompt)!=1||is.na(prompt)||!nzchar(trimws(prompt))) stop("Supply a nonempty text prompt.")
   if(!isTRUE(send)||!identical(as.character(approved_prompt),as.character(prompt)))
     stop("Inspect the exact prompt and explicitly approve it with send = TRUE.")
@@ -51,28 +53,37 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   save_meta <- function(metadata = meta) jsonlite::write_json(metadata,file.path(run,"metadata.json"),
     auto_unbox = TRUE,pretty = TRUE,null = "null")
   save_meta()
-  response <- tryCatch(api_request("/chat/completions",
-    review_request(model,prompt,max_tokens,reasoning_effort),
-    request_timeout = request_timeout, connection_timeout = connection_timeout),error = function(e) {
-      # The handler has its own scope: persist its updated object explicitly.
-      failed_meta <- meta
-      failed_meta$status <- "API_ERROR"
-      failed_meta$finished_utc <- format(Sys.time(), tz = "UTC", usetz = TRUE)
-      failed_meta$elapsed_seconds <- unname(proc.time()[["elapsed"]] - started)
-      save_meta(failed_meta)
-      stop("API request failed; metadata saved in ",run,". ",conditionMessage(e),call. = FALSE)
-    })
-  choice <- if(is.list(response$choices)&&length(response$choices)) response$choices[[1]] else NULL
-  content <- choice$message$content
-  has_text <- is.character(content)&&length(content)==1&&!is.na(content)&&nzchar(trimws(content))
-  meta$returned_model <- response$model;meta$finish_reason <- choice$finish_reason;meta$usage <- response$usage
-  meta$complete <- has_text && identical(choice$finish_reason,"stop")
-  meta$status <- if(meta$complete) "COMPLETED" else if(identical(choice$finish_reason,"length")) "TOKEN_LIMIT" else "INCOMPLETE"
-  meta$finished_utc <- format(Sys.time(),tz = "UTC",usetz = TRUE)
-  meta$elapsed_seconds <- unname(proc.time()[["elapsed"]] - started)
-  save_meta()
-  if(has_text) writeLines(enc2utf8(content),file.path(run,if(meta$complete) "response.md" else "response.partial.md"),useBytes = TRUE)
-  if(!meta$complete) stop("Incomplete response (",meta$status,"); inspect metadata in ",run,call. = FALSE)
-  message("Response saved to ",file.path(run,"response.md"))
-  invisible(list(text = content,run_dir = run,metadata = meta))
+  finish <- function(response = NULL, error = NULL) {
+    metadata <- meta
+    metadata$finished_utc <- format(Sys.time(), tz = "UTC", usetz = TRUE)
+    metadata$elapsed_seconds <- unname(proc.time()[["elapsed"]] - started)
+    if (!is.null(error)) {
+      metadata$status <- "API_ERROR"; save_meta(metadata)
+      stop("API request failed; metadata saved in ", run, ". ", conditionMessage(error), call. = FALSE)
+    }
+    choice <- if(is.list(response$choices)&&length(response$choices)) response$choices[[1]] else NULL
+    content <- choice$message$content
+    has_text <- is.character(content)&&length(content)==1&&!is.na(content)&&nzchar(trimws(content))
+    metadata$returned_model <- response$model;metadata$finish_reason <- choice$finish_reason;metadata$usage <- response$usage
+    metadata$complete <- has_text && identical(choice$finish_reason,"stop")
+    metadata$status <- if(metadata$complete) "COMPLETED" else if(identical(choice$finish_reason,"length")) "TOKEN_LIMIT" else "INCOMPLETE"
+    save_meta(metadata)
+    if(has_text) writeLines(enc2utf8(content),file.path(run,if(metadata$complete) "response.md" else "response.partial.md"),useBytes = TRUE)
+    if(!metadata$complete) stop("Incomplete response (",metadata$status,"); inspect metadata in ",run,call. = FALSE)
+    message("Response saved to ",file.path(run,"response.md"))
+    list(text = content,run_dir = run,metadata = metadata)
+  }
+  payload <- review_request(model, prompt, max_tokens, reasoning_effort)
+  if (!is.null(pool)) {
+    receive <- function(response = NULL, error = NULL)
+      callback(tryCatch(finish(response, error), error = identity))
+    handle <- tryCatch(api_request_async("/chat/completions", payload, pool = pool,
+      done = function(response) receive(response = response), fail = function(error) receive(error = error),
+      request_timeout = request_timeout, connection_timeout = connection_timeout),
+      error = function(e) { receive(error = e); NULL })
+    return(invisible(list(handle = handle, run_dir = run)))
+  }
+  response <- tryCatch(api_request("/chat/completions", payload,
+    request_timeout = request_timeout, connection_timeout = connection_timeout), error = identity)
+  if (inherits(response, "error")) finish(error = response) else invisible(finish(response))
 }
