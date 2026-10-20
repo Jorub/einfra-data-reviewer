@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Compact category screening overview
+
+- Add summary_short.csv with one row per full data_file_path and five PASS/FAIL category columns, derived in R from the detailed grouped results without another model call. Only PASS maps to PASS; REVIEW, NOT_CHECKED and absent categories map to FAIL as screening flags requiring attention, with original meanings/explanations retained in summary.csv.
+- Generate the overview at pilot checkpoints and provide a configured runner for existing saved results. Preserve original detailed reports and scans. Repeated identical paths aggregate conservatively; distinct paths remain distinct.
+- Verify category mapping, missing groups, duplicate handling, automatic export and regeneration without additional API calls or modification of the detailed summary.
+
 ## 2026-10-20 — Five-category review pilot
 
 - Add an editable prompt and separate selected-file runner using cached scans, with five independent results: variable/metadata, grid/spatial coverage, time coverage, variable values and source/processing. Require a brief concrete finding and feasible next action per group; retain detailed per-file reports and the separate numerical overview.

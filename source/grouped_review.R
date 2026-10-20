@@ -2,6 +2,32 @@
 grouped_check_names <- function() c("variable_and_metadata", "grid_and_spatial_coverage",
   "time_coverage", "variable_values", "source_and_processing")
 
+# Binary screening overview; full statuses and explanations stay in summary.csv.
+grouped_short_summary <- function(summary) {
+  required <- c("data_file_path", "check_group", "result")
+  if (!all(required %in% names(summary))) stop("Expected a grouped-review summary.csv.")
+  if (anyNA(summary[required]) || any(!summary$check_group %in% grouped_check_names()) ||
+      any(!summary$result %in% c("PASS", "FAIL", "REVIEW", "NOT_CHECKED")))
+    stop("Grouped summary contains missing or unsupported categories/results.")
+  overview <- data.frame(data_file_path = unique(summary$data_file_path), stringsAsFactors = FALSE)
+  for (group in grouped_check_names()) {
+    overview[[group]] <- vapply(overview$data_file_path, function(path) {
+      results <- summary$result[summary$data_file_path == path & summary$check_group == group]
+      if (length(results) && all(results == "PASS")) "PASS" else "FAIL"
+    }, character(1))
+  }
+  overview
+}
+write_grouped_short_summary <- function(review_dir) {
+  input <- file.path(review_dir, "summary.csv")
+  if (!file.exists(input)) stop("Set review_dir to the grouped-review folder containing summary.csv.")
+  overview <- grouped_short_summary(read.csv(input, stringsAsFactors = FALSE))
+  output <- file.path(review_dir, "summary_short.csv")
+  write.csv(overview, output, row.names = FALSE)
+  message("Short grouped summary saved to ", output, ". No scan or API calls performed.")
+  invisible(output)
+}
+
 # Correct known metadata equivalences using cached evidence, never inferred values.
 grouped_checks <- function(checks) {
   evidence <- attr(checks, "review_evidence")
@@ -121,6 +147,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows, model = "thinker
     summary <- do.call(rbind, summaries[!vapply(summaries, is.null, logical(1))])
     if (!is.null(summary)) {
       write.csv(summary, file.path(run, "summary.csv"), row.names = FALSE)
+      write.csv(grouped_short_summary(summary), file.path(run, "summary_short.csv"), row.names = FALSE)
       write.csv(summary[summary$result != "PASS", ], file.path(run, "flagged_files.csv"), row.names = FALSE)
     }
   }

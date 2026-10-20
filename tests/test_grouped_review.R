@@ -75,6 +75,23 @@ api_request <- function(route, payload) {
 }
 trial <- run_grouped_pilot(scan, work, 1:3, model = "fake", send_to_api = TRUE)
 summary <- read.csv(file.path(trial$run_dir, "summary.csv"))
+short <- read.csv(file.path(trial$run_dir, "summary_short.csv"))
+stopifnot(nrow(short) == 3, identical(names(short), c("data_file_path", grouped_check_names())),
+  all(short[1, -1] == "FAIL"), all(short[3, -1] == "FAIL"),
+  all(short[2, 2:5] == "PASS"), short$source_and_processing[2] == "FAIL")
+# REVIEW and unperformed/missing groups cannot become a binary PASS; duplicates
+# of the same file collapse conservatively, preserving full path identity.
+mixed <- summary[summary$data_file_path == "/fake/2.nc", ]
+mixed$result[1] <- "REVIEW"
+mixed <- rbind(mixed, transform(mixed[2, ], result = "NOT_CHECKED"))
+mixed <- mixed[mixed$check_group != "time_coverage", ]
+binary <- grouped_short_summary(mixed)
+stopifnot(nrow(binary) == 1, all(binary[1, 2:4] == "FAIL"), binary$variable_values == "PASS")
+before_summary <- tools::md5sum(file.path(trial$run_dir, "summary.csv"))
+unlink(file.path(trial$run_dir, "summary_short.csv"))
+write_grouped_short_summary(trial$run_dir)
+stopifnot(identical(before_summary, tools::md5sum(file.path(trial$run_dir, "summary.csv"))),
+  identical(short, read.csv(file.path(trial$run_dir, "summary_short.csv"))), api_calls == 3)
 stopifnot(api_calls == 3, identical(trial$index$llm_status, c("TOKEN_LIMIT", "COMPLETED", "INVALID_RESPONSE")),
   nrow(summary) == 15, identical(names(summary), c("data_file_path", "check_group", "result", "finding", "next_action")),
   all(summary$result[summary$data_file_path == "/fake/1.nc"] == "NOT_CHECKED"),

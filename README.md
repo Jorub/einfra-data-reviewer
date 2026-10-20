@@ -95,10 +95,13 @@ The pilot starts at the current experiment's **20,000 completion tokens**, with 
 Pilot outputs use a separate numbered `review-<scan-id>` folder:
 
 - `summary.csv`: **`data_file_path,check_group,result,finding,next_action`**, five rows per selected file, with no overall verdict.
+- `summary_short.csv`: one row per `data_file_path`, followed by the five check-group columns containing only PASS/FAIL. Only PASS remains PASS; REVIEW, NOT_CHECKED and missing categories map to FAIL, meaning the category needs attention or has not passed. These screening flags do not replace the full statuses or prove a numerical error. Repeated identical paths collapse conservatively; different full paths stay separate.
 - `flagged_files.csv`: the non-PASS category rows.
 - `pilot_index.csv`: API/preparation/schema completion status per selected file; a known deterministic failure can remain FAIL even if the LLM call failed. Preview-only rows are not completed model assessments.
 - Each file retains `group-results.csv`, a readable `review.md`, the submitted prompt, cached pilot checks and model response/usage metadata. A transport-complete response can still be INVALID_RESPONSE if its five-category JSON is invalid; use `pilot_index.csv` for assessment completion.
 - `data_overview.csv` is copied unchanged when present, retaining the numerical overview separately.
+
+For an already completed grouped review, run `run_experiments/summarise_grouped_review.R` with `review_dir` set to its folder. This derives `summary_short.csv` locally from the existing detailed summary, without scanning data or calling a model. Future pilot runs create it automatically at each checkpoint.
 
 Original scans and the established reviewer remain intact. The pilot does not create the legacy `review_index.csv`; do not point the existing retry runner at a pilot folder. To repeat a trial, run the pilot again against the saved scan with selected rows. A cached `pct`/`percent` units mismatch is corrected as a known spelling equivalence in the pilot copy, without rescaling values or rewriting the original scan.
 
