@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-20 — Reliable API-failure status and safe transport diagnostics
+
+- Correct direct/grouped review error metadata that remained NOT_COMPLETED: the error handler updated a local object while the writer read the enclosing unchanged object. Persist the updated error metadata explicitly as API_ERROR, with completion time and elapsed seconds.
+- Classify known curl condition classes into fixed safe timeout, DNS, connection, TLS and transfer labels without exposing raw error messages, URLs or credentials. Existing suppressed failures cannot be retrospectively diagnosed. Preserve timeout, token, reasoning and retry settings.
+- Test saved API_ERROR propagation into grouped indexes, incomplete/token-limit distinctions, elapsed timing and private-sentinel exclusion across known and unknown transport conditions. No live API calls or user credentials were used.
+
 ## 2026-10-20 — Full paper-input grouped review
 
 - Add a configured grouped-review runner for every row in the saved paper-input scan. NULL input_rows selects the full index, while explicit pilot subsets remain supported. Preserve the selected model, 20,000-token budget, sequential calls and per-file error continuation.

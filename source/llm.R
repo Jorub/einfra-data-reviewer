@@ -41,16 +41,22 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   run <- tempfile("llm-",tmpdir = output_dir)
   if(!dir.create(run)) stop("Cannot create run directory.")
   writeLines(enc2utf8(prompt),file.path(run,"prompt.md"),useBytes = TRUE)
+  started <- proc.time()[["elapsed"]]
   meta <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
     max_tokens = max_tokens,input_bytes = nchar(prompt,type = "bytes"),usage = NULL,
     finish_reason = NULL,status = "NOT_COMPLETED",complete = FALSE,
     started_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
-  save_meta <- function() jsonlite::write_json(meta,file.path(run,"metadata.json"),
+  save_meta <- function(metadata = meta) jsonlite::write_json(metadata,file.path(run,"metadata.json"),
     auto_unbox = TRUE,pretty = TRUE,null = "null")
   save_meta()
   response <- tryCatch(api_request("/chat/completions",
     review_request(model,prompt,max_tokens,reasoning_effort)),error = function(e) {
-      meta$status <- "API_ERROR";save_meta()
+      # The handler has its own scope: persist its updated object explicitly.
+      failed_meta <- meta
+      failed_meta$status <- "API_ERROR"
+      failed_meta$finished_utc <- format(Sys.time(), tz = "UTC", usetz = TRUE)
+      failed_meta$elapsed_seconds <- unname(proc.time()[["elapsed"]] - started)
+      save_meta(failed_meta)
       stop("API request failed; metadata saved in ",run,". ",conditionMessage(e),call. = FALSE)
     })
   choice <- if(is.list(response$choices)&&length(response$choices)) response$choices[[1]] else NULL
@@ -60,6 +66,7 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   meta$complete <- has_text && identical(choice$finish_reason,"stop")
   meta$status <- if(meta$complete) "COMPLETED" else if(identical(choice$finish_reason,"length")) "TOKEN_LIMIT" else "INCOMPLETE"
   meta$finished_utc <- format(Sys.time(),tz = "UTC",usetz = TRUE)
+  meta$elapsed_seconds <- unname(proc.time()[["elapsed"]] - started)
   save_meta()
   if(has_text) writeLines(enc2utf8(content),file.path(run,if(meta$complete) "response.md" else "response.partial.md"),useBytes = TRUE)
   if(!meta$complete) stop("Incomplete response (",meta$status,"); inspect metadata in ",run,call. = FALSE)

@@ -25,7 +25,21 @@ for(mode in c("length","empty","error")) {
  dest<-file.path(out,mode)
  stopifnot(inherits(try(ask_llm(p,"mock",dest,approved_prompt = p,send = TRUE),silent = TRUE),"try-error"))
  run <- list.dirs(dest,recursive = FALSE,full.names = TRUE)[1]
- stopifnot(!file.exists(file.path(run,"response.md")),!jsonlite::read_json(file.path(run,"metadata.json"))$complete)
+ metadata <- jsonlite::read_json(file.path(run,"metadata.json"))
+ stopifnot(!file.exists(file.path(run,"response.md")), !metadata$complete,
+   identical(metadata$status, switch(mode, length = "TOKEN_LIMIT", empty = "INCOMPLETE", error = "API_ERROR")),
+   is.numeric(metadata$elapsed_seconds), metadata$elapsed_seconds >= 0, !is.null(metadata$finished_utc))
+}
+# Transport diagnostics retain useful categories while suppressing raw contents.
+classes <- c("curl_error_operation_timedout", "curl_error_couldnt_resolve_host", "curl_error_couldnt_connect",
+  "curl_error_ssl_connect_error", "curl_error_recv_error", "unrecognized_private_class")
+labels <- c("TIMEOUT", "DNS_ERROR", "CONNECT_ERROR", "TLS_ERROR", "TRANSFER_ERROR", "UNKNOWN_TRANSPORT_ERROR")
+for (i in seq_along(classes)) {
+ condition <- structure(list(message = "FAKE_PRIVATE_SENTINEL https://private.invalid/token", call = NULL),
+   class = c(classes[i], "error", "condition"))
+ diagnostic <- connection_error_summary(condition)
+ stopifnot(grepl(paste0("[", labels[i], "]"), diagnostic, fixed = TRUE),
+   !grepl("FAKE_PRIVATE_SENTINEL", diagnostic, fixed = TRUE), !grepl("private.invalid", diagnostic, fixed = TRUE))
 }
 unlink(out,recursive = TRUE)
 cat("Direct LLM tests passed: prompt building, text-only evidence, approval, request shape, Markdown output, unique runs and incomplete/error handling. No API calls.\n")

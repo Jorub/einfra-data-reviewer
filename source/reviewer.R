@@ -34,6 +34,16 @@ review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) 
   if(!is.null(reasoning_effort)) request$reasoning_effort <- reasoning_effort
   request
 }
+# Classify known curl conditions using fixed labels, never raw error text.
+connection_error_summary <- function(error) {
+  category <- if (inherits(error, "curl_error_operation_timedout")) "TIMEOUT" else
+    if (inherits(error, c("curl_error_couldnt_resolve_host", "curl_error_couldnt_resolve_proxy"))) "DNS_ERROR" else
+    if (inherits(error, "curl_error_couldnt_connect")) "CONNECT_ERROR" else
+    if (inherits(error, c("curl_error_ssl_connect_error", "curl_error_peer_failed_verification", "curl_error_ssl_certproblem"))) "TLS_ERROR" else
+    if (inherits(error, c("curl_error_send_error", "curl_error_recv_error", "curl_error_got_nothing", "curl_error_partial_file"))) "TRANSFER_ERROR" else
+    "UNKNOWN_TRANSPORT_ERROR"
+  paste0("API connection failed [", category, "]; raw details suppressed to protect credentials.")
+}
 api_request <- function(route, payload = NULL) {
   if (!route %in% c("/models", "/chat/completions")) stop("Unsupported API route.")
   if (!exists("key", envir = .einfra, inherits = FALSE)) stop("Load private credentials with set_api_key() first.")
@@ -43,7 +53,7 @@ api_request <- function(route, payload = NULL) {
   if (!is.null(payload)) curl::handle_setopt(h, postfields = jsonlite::toJSON(
     payload, auto_unbox = TRUE, null = "null"))
   response <- tryCatch(curl::curl_fetch_memory(paste0(endpoint, route), handle = h),
-    error = function(e) stop("API connection failed; details suppressed to protect credentials.", call. = FALSE))
+    error = function(e) stop(connection_error_summary(e), call. = FALSE))
   if (response$status_code != 200L) stop(http_error_summary(response$status_code,response$content),call. = FALSE)
   tryCatch(jsonlite::fromJSON(rawToChar(response$content), simplifyVector = FALSE),
     error = function(e) stop("API returned invalid JSON; body suppressed."))

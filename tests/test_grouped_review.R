@@ -98,5 +98,10 @@ stopifnot(api_calls == 3, identical(trial$index$llm_status, c("TOKEN_LIMIT", "CO
   sum(summary$result[summary$data_file_path == "/fake/2.nc"] == "FAIL") == 1,
   all(summary$result[summary$data_file_path == "/fake/3.nc"] == "NOT_CHECKED"),
   identical(before, tools::md5sum(file.path(scan, "review_index.csv"))))
+# Request errors must propagate as API_ERROR rather than stale NOT_COMPLETED.
+api_request <- function(...) stop("API connection failed [TIMEOUT]; raw details suppressed.")
+failed <- run_grouped_pilot(scan, work, input_rows = 1, model = "fake", send_to_api = TRUE)
+stopifnot(identical(failed$index$llm_status, "API_ERROR"),
+  grepl("[TIMEOUT]", failed$index$reason, fixed = TRUE))
 unlink(work, recursive = TRUE)
 cat("Grouped pilot passed: exact five-group schema, per-group guards, known unit equivalence, preview privacy, cached-only execution, token/schema errors and preserved scans. No live API calls.\n")
