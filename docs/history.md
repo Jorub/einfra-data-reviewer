@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Persist and print the full missing-file overview
+
+- Save every missing path to output_dir/missing_files.csv and print the full list before raising a short error, avoiding long stop() messages that R/RStudio may truncate. Apply this to standalone checking and all scan batches. No NetCDF values or API calls are started.
+- Regenerate the CSV on each check, including an empty table when all paths exist, so a corrected run cannot leave a stale missing-file report. Keep the missing_files vector and typed error available.
+- Test a 50-file long-path list, complete console/CSV output, stale-report clearing and absence of scan-batch creation before error.
+
 ## 2026-10-21 — Stop scans early with a complete missing-file list
 
 - Add a lightweight path-only preflight and a standalone configured checker. Return all missing full paths as a character vector; automatic batch validation lists them together and errors before creating a scan batch or reading NetCDF values. Reject directory paths as input files. No credentials, API calls or NetCDF dependencies are required for the standalone check.

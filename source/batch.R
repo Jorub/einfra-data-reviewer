@@ -7,8 +7,8 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
                                max_tokens = 8192L, reasoning_effort = NULL,
                                send_to_api = FALSE, max_input_bytes = 64000L) {
   if(!is.list(file_specs)||!length(file_specs)) stop("Supply a nonempty list of file specifications.")
-  check_input_files(file_specs)           # fail on all missing paths before creating a scan batch
   if(!is.character(output_dir)||length(output_dir)!=1||is.na(output_dir)||!nzchar(output_dir)) stop("Set output_dir.")
+  check_input_files(file_specs, report_dir = output_dir) # save/print every missing path before scanning
   if(!dir.exists(output_dir)&&!dir.create(output_dir,recursive = TRUE)) stop("Cannot create output_dir.")
   batch <- new_scan_directory(output_dir)
   # Explicit opt-in covers the built-in filename/metadata/summary/history payloads

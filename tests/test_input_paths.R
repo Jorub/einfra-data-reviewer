@@ -22,14 +22,22 @@ scan_calls <- 0L; api_calls <- 0L
 check_netcdf <- function(...) { scan_calls <<- scan_calls + 1L; stop("Unexpected data read") }
 api_request <- function(...) { api_calls <<- api_calls + 1L; stop("Unexpected API request") }
 output <- file.path(work, "output")
-error <- tryCatch(run_netcdf_reviews(specs, output, send_to_api = TRUE), error = identity)
+printed <- capture.output(error <- tryCatch(run_netcdf_reviews(specs, output, send_to_api = TRUE), error = identity))
+saved <- read.csv(file.path(output, "missing_files.csv"), stringsAsFactors = FALSE)
 stopifnot(inherits(error, "missing_input_files"), identical(error$missing_files, missing),
-  all(vapply(missing, grepl, logical(1), x = conditionMessage(error), fixed = TRUE)),
-  scan_calls == 0L, api_calls == 0L, !dir.exists(output))
+  all(paste0("- ", missing) %in% printed), identical(saved$data_file_path, missing),
+  scan_calls == 0L, api_calls == 0L, length(list.dirs(output, recursive = FALSE)) == 0)
 for (invalid in list(list(), list(list()), list(list(path = NA_character_)), list(list(path = ""))))
   stopifnot(inherits(try(missing_input_files(invalid), silent = TRUE), "try-error"))
 # A correction allows preflight to pass; it does not claim valid NetCDF contents.
 for (path in missing) writeLines("Another path-only fixture", path)
-stopifnot(identical(check_input_files(specs), character()), scan_calls == 0L, api_calls == 0L)
+stopifnot(identical(check_input_files(specs, report_dir = output), character()),
+  nrow(read.csv(file.path(output, "missing_files.csv"))) == 0, scan_calls == 0L, api_calls == 0L)
+# A long complete list survives independently of R's error-message display limit.
+many <- file.path(work, paste0(sprintf("missing-%03d-", 1:50), strrep("x", 100), ".nc"))
+printed <- capture.output(error <- tryCatch(check_input_files(lapply(many, function(path) list(path = path)),
+  report_dir = output), error = identity))
+stopifnot(length(error$missing_files) == 50, all(paste0("- ", many) %in% printed),
+  identical(read.csv(file.path(output, "missing_files.csv"))$data_file_path, many))
 unlink(work, recursive = TRUE)
 cat("Input preflight passed: all missing paths returned/listed, expansion, directories, duplicate paths, zero scan/API calls and no batch created before failure.\n")

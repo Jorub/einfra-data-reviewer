@@ -11,12 +11,22 @@ missing_input_files <- function(file_specs) {
   paths[!absolute] <- file.path(getwd(), paths[!absolute])
   unique(unname(paths[!file.exists(paths) | dir.exists(paths)]))
 }
-check_input_files <- function(file_specs) {
+check_input_files <- function(file_specs, report_dir = NULL) {
   missing <- missing_input_files(file_specs)
+  report <- NULL
+  if (!is.null(report_dir)) {
+    if (!is.character(report_dir) || length(report_dir) != 1 || is.na(report_dir) || !nzchar(report_dir))
+      stop("Set a valid report_dir for the missing-file list.")
+    if (!dir.exists(report_dir) && !dir.create(report_dir, recursive = TRUE)) stop("Cannot create report_dir.")
+    report <- file.path(report_dir, "missing_files.csv")
+    write.csv(data.frame(data_file_path = missing), report, row.names = FALSE)
+  }
   if (length(missing)) {
-    message <- paste0("Input preflight failed: ", length(missing), " input file(s) not found from this R session:\n",
-      paste0("- ", missing, collapse = "\n"),
-      "\nDirectories are not valid input files. Correct the paths or mount/access, then rerun. No scan started.")
+    # Print outside stop(): R/RStudio can truncate a long error message.
+    writeLines(c("Input files not found:", paste0("- ", missing)))
+    message <- paste0("Input preflight failed: ", length(missing), " missing input file(s). ",
+      if (!is.null(report)) paste0("Complete list saved to ", report, ". ") else "Complete list printed above. ",
+      "No scan started.")
     stop(structure(list(message = message, call = NULL, missing_files = missing),
       class = c("missing_input_files", "error", "condition")))
   }
