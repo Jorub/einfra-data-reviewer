@@ -2,6 +2,10 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Guard the standalone path-check success message
+
+- Recheck path availability before printing success, including when RStudio runs the final expression separately after a missing-file error. Preserve the complete missing-path list, CSV export and scan-blocking error.
+
 ## 2026-10-21 — Categorical review heatmap
 
 - Export a filename-by-category heatmap as PNG and vector PDF alongside grouped results. Preserve CSV row order and exact PASS/FAIL/REVIEW/NOT_CHECKED labels; use green/red/amber/light-grey fills with status text. Distinguish repeated basenames using parent-folder context without dropping rows or exposing full paths unnecessarily.

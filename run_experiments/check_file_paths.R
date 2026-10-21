@@ -12,4 +12,6 @@ paths <- project_paths(data_root = data_root, output_dir = output_dir)
 file_specs <- read_data_file_paths(data_file_paths, data_root = paths$data_root)
 missing_files <- missing_input_files(file_specs)
 check_input_files(file_specs, report_dir = paths$output_dir) # saves/prints all paths before stopping
-message("All ", length(file_specs), " input files exist. No NetCDF scan or API calls performed.")
+# Guard success even when individual lines are run after an error in RStudio.
+if (!length(missing_input_files(file_specs)))
+  message("All ", length(file_specs), " input files exist. No NetCDF scan or API calls performed.")
