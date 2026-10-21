@@ -1,6 +1,7 @@
 # Five-group pilot; independent of the existing single-verdict reviewer.
 grouped_check_names <- function() c("variable_and_metadata", "grid_and_spatial_coverage",
   "time_coverage", "variable_values", "source_and_processing")
+source("source/review_heatmap.R")
 
 # Compact overview using exactly the same result labels as summary.csv.
 grouped_short_summary <- function(summary) {
@@ -20,12 +21,13 @@ grouped_short_summary <- function(summary) {
   }
   overview
 }
-write_grouped_short_summary <- function(review_dir) {
+write_grouped_short_summary <- function(review_dir, heatmap_rows_per_page = 50L) {
   input <- file.path(review_dir, "summary.csv")
   if (!file.exists(input)) stop("Set review_dir to the grouped-review folder containing summary.csv.")
   overview <- grouped_short_summary(read.csv(input, stringsAsFactors = FALSE))
   output <- file.path(review_dir, "summary_short.csv")
   write.csv(overview, output, row.names = FALSE)
+  write_review_heatmap(review_dir, rows_per_page = heatmap_rows_per_page)
   message("Short grouped summary saved to ", output, ". No scan or API calls performed.")
   invisible(output)
 }
@@ -135,10 +137,12 @@ cancel_grouped_request <- function(handle) curl::multi_cancel(handle)
 run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "thinker", max_tokens = 20000L,
                               reasoning_effort = NULL, max_input_bytes = 64000L,
                               prompt_file = "docs/grouped-review-prompt.md", send_to_api = FALSE,
-                              request_timeout = 600, connection_timeout = 20, max_concurrent_requests = 1L) {
+                              request_timeout = 600, connection_timeout = 20, max_concurrent_requests = 1L,
+                              heatmap_rows_per_page = 50L) {
   validate_completion_budget(max_tokens)
   validate_api_timeouts(request_timeout, connection_timeout)
   validate_review_concurrency(max_concurrent_requests)
+  validate_heatmap_pages(heatmap_rows_per_page)
   index_file <- file.path(scan_dir, "review_index.csv")
   if (!file.exists(index_file)) stop("Set scan_dir to the saved scan folder containing review_index.csv.")
   source_index <- read.csv(index_file, stringsAsFactors = FALSE)
@@ -172,6 +176,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
   jsonlite::write_json(list(prompt_version = "grouped-review-pilot-v1", model = model, max_tokens = max_tokens,
     request_timeout = request_timeout, connection_timeout = connection_timeout,
     max_concurrent_requests = max_concurrent_requests,
+    heatmap_rows_per_page = heatmap_rows_per_page,
     reasoning_effort = reasoning_effort, input_rows = selected, send_to_api = send_to_api),
     file.path(run, "pilot-settings.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
   message("Grouped pilot: model=", model, "; max_tokens=", max_tokens, "; files=", length(selected),
@@ -263,6 +268,8 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
     }
     if (any(active)) poll_grouped_requests(pool)
   }
+  tryCatch(write_review_heatmap(run, rows_per_page = heatmap_rows_per_page),
+    error = function(e) warning("Heatmap export failed; saved CSV/model results remain intact: ", conditionMessage(e)))
   message("Grouped pilot saved to ", run, ". Existing reviewer outputs unchanged.")
   invisible(list(index = index, run_dir = run))
 }

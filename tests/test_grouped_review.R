@@ -75,7 +75,8 @@ api_request <- function(route, payload, request_timeout, connection_timeout) {
 }
 trial <- run_grouped_pilot(scan, work, model = "fake", send_to_api = TRUE, request_timeout = 420)
 settings <- jsonlite::read_json(file.path(trial$run_dir, "pilot-settings.json"))
-stopifnot(settings$request_timeout == 420, settings$connection_timeout == 20)
+stopifnot(settings$request_timeout == 420, settings$connection_timeout == 20, settings$heatmap_rows_per_page == 50,
+  all(file.exists(file.path(trial$run_dir, c("summary_heatmap.png", "summary_heatmap.pdf")))))
 summary <- read.csv(file.path(trial$run_dir, "summary.csv"))
 short <- read.csv(file.path(trial$run_dir, "summary_short.csv"))
 stopifnot(nrow(short) == 3, identical(names(short), c("data_file_path", grouped_check_names())),
@@ -96,9 +97,11 @@ conflicting <- rbind(mixed, transform(mixed[1, ], result = "FAIL"))
 stopifnot(inherits(try(grouped_short_summary(conflicting), silent = TRUE), "try-error"))
 before_summary <- tools::md5sum(file.path(trial$run_dir, "summary.csv"))
 unlink(file.path(trial$run_dir, "summary_short.csv"))
+unlink(file.path(trial$run_dir, c("summary_heatmap.png", "summary_heatmap.pdf")))
 write_grouped_short_summary(trial$run_dir)
 stopifnot(identical(before_summary, tools::md5sum(file.path(trial$run_dir, "summary.csv"))),
-  identical(short, read.csv(file.path(trial$run_dir, "summary_short.csv"))), api_calls == 3)
+  identical(short, read.csv(file.path(trial$run_dir, "summary_short.csv"))), api_calls == 3,
+  all(file.exists(file.path(trial$run_dir, c("summary_heatmap.png", "summary_heatmap.pdf")))))
 stopifnot(api_calls == 3, identical(trial$index$llm_status, c("TOKEN_LIMIT", "COMPLETED", "INVALID_RESPONSE")),
   nrow(summary) == 15, identical(names(summary), c("data_file_path", "check_group", "result", "finding", "next_action")),
   all(summary$result[summary$data_file_path == "/fake/1.nc"] == "NOT_CHECKED"),
@@ -110,5 +113,12 @@ api_request <- function(...) stop("API connection failed [TIMEOUT]; raw details 
 failed <- run_grouped_pilot(scan, work, input_rows = 1, model = "fake", send_to_api = TRUE)
 stopifnot(identical(failed$index$llm_status, "API_ERROR"),
   grepl("[TIMEOUT]", failed$index$reason, fixed = TRUE))
+# Export errors are visible but cannot invalidate completed CSV/check results.
+write_review_heatmap <- function(...) stop("Synthetic image export failure")
+warnings <- character()
+plot_failed <- withCallingHandlers(run_grouped_pilot(scan, work, input_rows = 1, send_to_api = FALSE),
+  warning = function(w) { warnings <<- c(warnings, conditionMessage(w)); invokeRestart("muffleWarning") })
+stopifnot(any(grepl("saved CSV/model results remain intact", warnings, fixed = TRUE)),
+  file.exists(file.path(plot_failed$run_dir, "summary_short.csv")), plot_failed$index$llm_status == "NOT_RUN")
 unlink(work, recursive = TRUE)
 cat("Grouped pilot passed: exact five-group schema, per-group guards, known unit equivalence, preview privacy, cached-only execution, token/schema errors and preserved scans. No live API calls.\n")

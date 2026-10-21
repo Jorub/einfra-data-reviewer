@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Categorical review heatmap
+
+- Export a filename-by-category heatmap as PNG and vector PDF alongside grouped results. Preserve CSV row order and exact PASS/FAIL/REVIEW/NOT_CHECKED labels; use green/red/amber/light-grey fills with status text. Distinguish repeated basenames using parent-folder context without dropping rows or exposing full paths unnecessarily.
+- Render locally with built-in R graphics and no new packages or model calls. Generate once after grouped batch completion and from the existing summary-regeneration runner. Paginate long lists at configurable heatmap_rows_per_page (default 50) into a multipage PDF and numbered PNGs, keeping request checkpoints lightweight.
+- Verify exact data/label preservation, filename disambiguation, page order, output signatures, graphics-device cleanup, stale generated-page replacement and unchanged input CSV. Inspect PNG and rendered PDF previews against the supplied 35-file summary; real server inputs were not opened.
+
 ## 2026-10-21 — Persist and print the full missing-file overview
 
 - Save every missing path to output_dir/missing_files.csv and print the full list before raising a short error, avoiding long stop() messages that R/RStudio may truncate. Apply this to standalone checking and all scan batches. No NetCDF values or API calls are started.
