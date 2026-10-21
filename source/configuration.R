@@ -24,7 +24,7 @@ read_data_file_paths <- function(table_file, data_root = "") {
   if (any(!absolute) && !nzchar(data_root)) stop("Relative input paths require data_root.")
   resolved <- path.expand(paths)
   resolved[!absolute] <- file.path(data_root, paths[!absolute])
-  # File existence is checked per file by the scan, so one missing file cannot stop a batch.
+  # Resolve paths here; scan entrypoints perform an all-input existence preflight.
   specs <- lapply(seq_along(paths), function(i) {
     spec <- list(path = resolved[i])
     if ("family" %in% names(table) && !is.na(table$family[i])) {

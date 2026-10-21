@@ -20,7 +20,9 @@ for (folder in c("raw", "processed")) {
   ncdf4::nc_close(n)
 }
 inputs <- file.path(work, "inputs.csv")
-write.csv(data.frame(data_file_path = c(file.path("raw", name), file.path("processed", name), "missing.nc"),
+broken_name <- "synthetic_t2m_degC_region_200003_200004_025_monthly.nc"
+writeLines("Existing but unreadable NetCDF fixture", file.path(work, broken_name))
+write.csv(data.frame(data_file_path = c(file.path("raw", name), file.path("processed", name), broken_name),
   family = "temperature"), inputs, row.names = FALSE)
 # Spreadsheet/hand-edited CSV categories may have surrounding or quoted spaces.
 input_table <- read.csv(inputs, stringsAsFactors = FALSE)
@@ -29,7 +31,7 @@ write.csv(input_table, inputs, row.names = FALSE)
 specs <- read_data_file_paths(inputs, work)
 stopifnot(specs[[1]]$family == "temperature", specs[[2]]$family == "temperature", is.null(specs[[3]]$family))
 specs <- configure_scan_specs(specs, use_system_tools = FALSE)
-attr(specs, "data_file_paths") <- c(file.path("raw", name), file.path("processed", name), "missing.nc")
+attr(specs, "data_file_paths") <- c(file.path("raw", name), file.path("processed", name), broken_name)
 # Scanning must not invoke inference or need credentials.
 api_request <- function(...) stop("Unexpected API call")
 scan <- scan_netcdf_files(specs, file.path(work, "outputs"))

@@ -35,9 +35,15 @@ temperature/raw/example.nc,temperature
 precip/processed/example.nc,precip
 ```
 
-`data_file_path` is required; `family` is optional when inference is sufficient. Optional `provenance_notes` supplies actual source documentation. Relative file paths resolve against `data_root`, not the CSV location. Absolute paths are also supported. The checker still derives scientific expectations from each filename, not the example names above. Missing files are recorded and do not stop later files.
+`data_file_path` is required; `family` is optional when inference is sufficient. Optional `provenance_notes` supplies actual source documentation. Relative file paths resolve against `data_root`, not the CSV location. Absolute paths are also supported. The checker still derives scientific expectations from each filename, not the example names above. A preflight checks every resolved input path before starting a batch; any missing files stop the scan with the complete list of missing full paths.
 
 Set `data_root` and `output_dir` near the top of the runner. To use machine-specific overrides, copy `config/paths.local.example.R` to ignored `config/paths.local.R`. That file contains paths only, never credentials. Relative output/table paths resolve from the repository root. Shared relative paths may be tracked; review input tables before publishing them.
+
+## Check file paths first
+
+For a quick standalone check, open `run_experiments/check_file_paths.R`, set `data_file_paths` and `data_root` near the top, then run from the project root. It lists **all missing full paths** and stops with an error if any are absent. `missing_files` retains the character-vector list in the R session. It does not open NetCDF contents, create a scan batch, load credentials or call a model. Existing directories are rejected as file inputs; file presence does not prove valid data.
+
+The sourced helper `missing_input_files(file_specs)` returns only missing paths without throwing. `check_input_files(file_specs)` raises an immediate error containing the full list. All scan runners automatically apply that check before creating a new scan batch or reading values. Correct every listed path or mount/access issue, then rerun. The check reflects availability from the current R session; a file removed or becoming unreadable later is still recorded as a per-file scan error, allowing other inputs to continue. Existing cached LLM reviews are unaffected and do not require source paths to exist.
 
 ## 1. Scan and save (no API key required)
 
@@ -49,7 +55,7 @@ Choose a runner, edit its configuration, then run it from the top:
 
 Scans read all time layers sequentially and checkpoint a `scan-<id>` folder with one random identifier after each file. Daily/hourly files may take substantial time. No model is called during this stage. New scans check ncdf4, CFtime and jsonlite before starting; missing prerequisites stop with setup instructions instead of completing an expensive scan without time checks.
 
-Each batch includes **`data_overview.csv`**, one row per requested input, including unreadable/missing files. It contains the table path and resolved input path, variable, units, mean/min/max, grid endpoints/extents/spacing/counts, layer count, time coverage and missing-period count. `recorded_operations` retains the included redacted history (possibly multiline), without inferring a complete recipe. File size/mtime, scan time and scanner version are included; exact scanner-file checksums are stored in each `scan-record.json`. Source size/mtime before and after the scan are recorded; they are not content hashes.
+Each batch includes **`data_overview.csv`**, one row per requested input once preflight passes, including files that subsequently become unreadable or disappear. Older saved batches may already contain missing-file rows. It contains the table path and resolved input path, variable, units, mean/min/max, grid endpoints/extents/spacing/counts, layer count, time coverage and missing-period count. `recorded_operations` retains the included redacted history (possibly multiline), without inferring a complete recipe. File size/mtime, scan time and scanner version are included; exact scanner-file checksums are stored in each `scan-record.json`. Source size/mtime before and after the scan are recorded; they are not content hashes.
 
 Detailed per-file outputs remain:
 

@@ -4,6 +4,8 @@ These project-specific requirements govern checks and model review. They are not
 
 ## Filename-derived expectations
 
+New scan batches first check every resolved input path. A missing file, inaccessible path reported absent by the filesystem, or directory in place of a file blocks the batch before any NetCDF inspection; all such full paths are listed together. This preflight checks availability only, not contents or scientific correctness. Errors encountered after a successful preflight remain per-file scan errors. Saved-evidence LLM reviews do not require source files to remain accessible and do not perform this preflight.
+
 The current common NetCDF checker parses:
 
 `DATASET_VARIABLE_UNIT_SCALE_START_END_SPATIALRESOLUTION_TEMPORALRESOLUTION.nc`

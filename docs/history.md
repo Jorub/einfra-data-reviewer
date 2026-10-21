@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Stop scans early with a complete missing-file list
+
+- Add a lightweight path-only preflight and a standalone configured checker. Return all missing full paths as a character vector; automatic batch validation lists them together and errors before creating a scan batch or reading NetCDF values. Reject directory paths as input files. No credentials, API calls or NetCDF dependencies are required for the standalone check.
+- Apply the guard to all shared scan entrypoints, replacing the previous behaviour of discovering missing paths late inside the file loop. Content errors after a successful preflight still checkpoint and continue; a file disappearing after the check remains a per-file scan error. Cached LLM reviews still work without original source files.
+- Test multiple missing inputs, duplicate/path expansion, invalid specifications, zero scan/API work before failure and no new batch directory. Preserve integration coverage for unreadable existing files and saved reviews after source removal.
+
 ## 2026-10-20 — Four concurrent saved-scan LLM reviews
 
 - Add max_concurrent_requests (1–4), using the agreed four requests in the full grouped runner and retaining one for pilots/existing function callers. Respect the documented per-account limit; other account activity shares those slots. Keep NetCDF scanning sequential and preserve the 600/20-second timeouts, token budget, scientific prompt and verdict vocabulary.
