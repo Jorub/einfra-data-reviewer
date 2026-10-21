@@ -21,7 +21,7 @@ review_saved_scans <- function(scan_dir, output_dir, model = "thinker", max_toke
   if (!dir.exists(output_dir) && !dir.create(output_dir, recursive = TRUE)) stop("Cannot create output directory.")
   run <- linked_run_directory(scan_dir, output_dir, "review")
   index$source_report_path <- index$report_path
-  # Failed initial calls belong in rerun_reviews.R; do not repeat completed reviews.
+  # Legacy single-verdict helper: failed initial calls use rerun_llm_reviews(); do not repeat completed reviews.
   selected <- which(index$checks_status == "COMPLETED" & index$llm_status %in%
     c("NOT_RUN", "NOT_COMPLETED", "PENDING"))
   checkpoint <- function() {

@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Keep four configured workflow scripts
+
+- Keep only scan_files.R, review_grouped_scans.R, summarise_grouped_review.R and query_llm.R in run_experiments/. Delete the redundant/older runners instead of presenting competing workflows; automatic path preflight stays part of scanning, and input_rows supports both small trials and full reviews.
+- Rewrite current usage and migration guidance around those four scripts. Preserve all saved evidence, private configuration and reusable source helpers. Explain the different scan/review indexes and that targeted repeat runs do not yet consolidate prior completed results.
+- Keep scientific checks, model budgets, timeouts, concurrency and result labels unchanged. Validate remaining runner syntax, documentation entrypoints and the offline suite without accessing server data or making model calls.
+
 ## 2026-10-21 — Guard the standalone path-check success message
 
 - Recheck path availability before printing success, including when RStudio runs the final expression separately after a missing-file error. Preserve the complete missing-path list, CSV export and scan-blocking error.

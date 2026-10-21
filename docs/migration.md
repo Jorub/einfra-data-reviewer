@@ -1,37 +1,32 @@
-# Moving to separate scan and review stages
+# Current entrypoints and existing saved runs
 
-This branch changes code organisation and adds saved-scan review. It does not move existing data/reports, alter scientific policy, increase timeouts/token budgets or enable parallelism.
+## Four configured scripts
 
-## Before updating a server checkout
+`run_experiments/` now contains only:
 
-Keep existing run folders intact. Commit/stash or privately copy your edited runner settings before switching branches or pulling: the old top-level entry scripts are replaced. Do not commit private paths/credentials to do this. Existing relative report paths assume the same project-root working directory; no report-path migration is automatic.
+- `scan_files.R`: all NetCDF scanning, including a single-file table and automatic all-input path preflight.
+- `review_grouped_scans.R`: all current NetCDF LLM review; choose `input_rows` for either a trial or a full batch.
+- `summarise_grouped_review.R`: regenerate short summaries and heatmaps without scanning or API calls.
+- `query_llm.R`: general editable LLM prompts and Markdown responses.
 
-## Entry scripts
+The old single-verdict review runner and the separate pilot, path-check, single-file, temperature-folder, inventory, retry, history-refresh and CSV-example runners were deleted. Their previous versions remain in Git history. Reusable source functions are retained, including compatibility helpers used by existing caches and tests. Setup remains in `setup.R` at the project root.
 
-| Previous | Current |
-| --- | --- |
-| netcdf_example.R | run_experiments/scan_file.R, then review_scans.R |
-| three_file_example.R | run_experiments/scan_files.R, then review_scans.R |
-| temperature_folder_example.R | run_experiments/scan_temperature.R, then review_scans.R |
-| rerun_example.R | run_experiments/rerun_reviews.R |
-| inventory_sim.R | run_experiments/inventory_files.R |
-| llm_example.R | run_experiments/query_llm.R |
-| start_here.R | run_experiments/csv_example.R |
+Before pulling, privately preserve any settings you edited in a runner being deleted. Do not commit API keys or private paths. Put input paths in your configured CSV or ignored `config/paths.local.R`, and credentials in their separate private file. Functions belong in `source/`; run the configured scripts from the project root.
 
-Functions moved from R/ to source/. Internal imports and tests have been updated; external scripts sourcing R/ must update those paths. Open the RStudio project and run from its root rather than setting the working directory to run_experiments/.
+## Using existing saved evidence
 
-## Configuration and output
+No source data, scan folders, review folders or private configuration are moved or deleted by this cleanup. Keep reports in their original locations: saved relative paths assume the project-root working directory. Preserve `run-lineage.json` when copying new runs; moving report folders does not automatically update saved paths.
 
-Run setup.R once. It creates folders and a blank credentials template outside the checkout without overwriting existing files. Enter your API key only in that private file. Existing hidden-prompt behaviour is replaced by private-file loading, and getPass is no longer required. Machine-specific path overrides are separately kept in config/paths.local.R. Model/resource settings remain visible at the top of each runner.
+Set `scan_dir` in `review_grouped_scans.R` to an existing scan folder containing `review_index.csv` and cached diagnostics. Older no-API batch folders with that scan schema can also be used. Source files do not need to remain accessible to review cached evidence. A new scan is needed if an earlier scan failed, the source changed, or the scientific checks changed.
 
-config/data_file_paths.csv has a required data_file_path column and optional family/provenance_notes. Relative file paths use data_root; relative run/output paths use the project root. An empty table intentionally stops with instructions rather than scanning a guessed directory. Absolute paths are allowed but may be inappropriate to publish.
+Set `review_dir` in `summarise_grouped_review.R` to a grouped-review folder containing the five-group `summary.csv`. Its `pilot_index.csv` records execution status. Old single-verdict summaries are a different schema; they are preserved but cannot be regenerated as five-group summaries without a grouped assessment.
 
-The default output/ is ignored, but you can continue using your original persistent report directory via output_dir. New scans use scan-<id>; reviews reuse the same id as review-<id>, with -02, -03 suffixes for repeated reviews. Retries use rerun-<id>-01, -02, etc. History refreshes produce numbered scan revisions with the same id. Existing batch-* folders remain valid and are never renamed. New descendants adopt an old folder label when no run-lineage.json exists. Preserve that metadata file when copying new runs so later stages retain their original scan identifier. Outputs are not relocated or deleted. Setup creates the default project output folder; runners create explicitly configured external output directories when needed.
+Review calls do not automatically reuse completed results from earlier review folders. Select only the rows needing a repeat to avoid paying for completed calls again. Each new folder contains results for its selected rows; automatic consolidation across runs is not implemented. The older single-verdict retry helper is not compatible with grouped-review indexes.
 
-## Existing saved evidence
+## Settings and output
 
-Old no-API batches with completed scans and NOT_RUN/NOT_COMPLETED status can feed review_scans.R. Existing failed model attempts use rerun_reviews.R, choosing the latest batch/rerun index as before. Do not rerun a costly scan merely to retry inference.
+Run `setup.R` if dependencies or initial folders are missing; it preserves existing configuration. The current CSV requires `data_file_path`; `family` and `provenance_notes` are optional. Relative input paths resolve against `data_root`, and relative output paths against the project root. An empty input table stops with instructions rather than guessing a directory.
 
-The new combined data_overview.csv is generated by fresh scans and copied unchanged into review/rerun folders. Old batches without it are still reviewable, but this restructure does not fabricate statistics, complete missing-date lists or scan identity that older caches never collected. Existing detailed per-file outputs remain available in their original folders.
+Current grouped settings stay unchanged: 20,000 completion tokens, provider-default reasoning, 600-second request and 20-second connection timeouts, up to four concurrent requests. Scans remain sequential. Scientific checks and the four result labels are unchanged.
 
-New scan records contain file size/mtime before and after scanning, scan time, scanner version and scanner source-code MD5 checksums. These do not prove input content identity or automatically invalidate caches. A saved review deliberately works without access to the original data. Refresh scans when source data or scientific checks change.
+New scans use `scan-<id>`. Reviews reuse the id as `review-<id>`, adding numbered suffixes for repeats. Original runs are not overwritten. Setup creates the default output directory; runners create explicitly configured external output directories when needed. Existing reports without newer statistics or scan identity remain usable within their available evidence; this cleanup does not fabricate missing diagnostics.

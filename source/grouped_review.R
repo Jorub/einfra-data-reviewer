@@ -1,4 +1,4 @@
-# Five-group pilot; independent of the existing single-verdict reviewer.
+# Current five-group reviewer; source-level legacy helpers remain separate.
 grouped_check_names <- function() c("variable_and_metadata", "grid_and_spatial_coverage",
   "time_coverage", "variable_values", "source_and_processing")
 source("source/review_heatmap.R")
