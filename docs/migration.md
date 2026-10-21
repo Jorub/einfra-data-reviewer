@@ -1,12 +1,13 @@
 # Current entrypoints and existing saved runs
 
-## Four configured scripts
+## Five configured scripts
 
 `run_experiments/` now contains only:
 
 - `scan_files.R`: all NetCDF scanning, including a single-file table and automatic all-input path preflight.
 - `review_grouped_scans.R`: all current NetCDF LLM review; choose `input_rows` for either a trial or a full batch.
 - `summarise_grouped_review.R`: regenerate short summaries and heatmaps without scanning or API calls.
+- `merge_reviews.R`: combine existing full/partial grouped reviews into a new consolidated view.
 - `query_llm.R`: general editable LLM prompts and Markdown responses.
 
 The old single-verdict review runner and the separate pilot, path-check, single-file, temperature-folder, inventory, retry, history-refresh and CSV-example runners were deleted. Their previous versions remain in Git history. Reusable source functions are retained, including compatibility helpers used by existing caches and tests. Setup remains in `setup.R` at the project root.
@@ -21,7 +22,7 @@ Set `scan_dir` in `review_grouped_scans.R` to an existing scan folder containing
 
 Set `review_dir` in `summarise_grouped_review.R` to a grouped-review folder containing the five-group `summary.csv`. Its `pilot_index.csv` records execution status. Old single-verdict summaries are a different schema; they are preserved but cannot be regenerated as five-group summaries without a grouped assessment.
 
-Review calls do not automatically reuse completed results from earlier review folders. Select only the rows needing a repeat to avoid paying for completed calls again. Each new folder contains results for its selected rows; automatic consolidation across runs is not implemented. The older single-verdict retry helper is not compatible with grouped-review indexes.
+Review calls do not automatically reuse completed results from earlier review folders. Select only the rows needing a repeat to avoid paying for completed calls again. Each new review folder contains results for its selected rows. Use merge_reviews.R to combine these folders in explicit oldest-to-newest order, selecting each file's newest completed assessment and preserving failed-only files as incomplete. Whole assessments are selected; individual favourable verdicts are not mixed across runs. Full paths define identity, and changed verdicts are logged separately. Originals and detailed report references are preserved. The older single-verdict retry helper is not compatible with grouped-review indexes.
 
 ## Settings and output
 

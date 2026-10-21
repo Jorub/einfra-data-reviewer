@@ -41,13 +41,14 @@ Set `data_root` and `output_dir` near the top of the runner. To use machine-spec
 
 ## Workflow
 
-There are exactly four configured scripts in `run_experiments/`:
+There are five configured scripts in `run_experiments/`:
 
 | Script | Purpose |
 | --- | --- |
 | `scan_files.R` | Check all input paths, scan the listed NetCDF files and save evidence. |
 | `review_grouped_scans.R` | Review saved scans with five separate LLM assessments. |
 | `summarise_grouped_review.R` | Regenerate the short summary and heatmap from saved grouped results. |
+| `merge_reviews.R` | Combine full and partial grouped reviews into one view without LLM calls. |
 | `query_llm.R` | Send a general editable prompt independently of the NetCDF workflow. |
 
 Run from the project root. Keep settings near the top of each script and run from the top after editing them. `setup.R` remains the separate setup entrypoint.
@@ -78,7 +79,7 @@ Run first with `send_to_api = FALSE` and inspect each `grouped-preview.txt`. Set
 
 The configured defaults are model `thinker`, **20,000 completion tokens**, `reasoning_effort = NULL`, a 64 kB input guard, **600 seconds** per request, **20 seconds** to connect, and **four concurrent requests**. Settings remain near the top of the runner and are recorded in `pilot-settings.json` and per-attempt metadata. Completion budgets can include reasoning. NULL omits the reasoning field and uses the provider default; support for explicit settings is model-dependent. A budget does not guarantee completion.
 
-Each run creates a new `review-<scan-id>` folder, with numbered suffixes for repeats. Existing results are preserved. **All selected rows receive fresh assessments**; completed results from earlier review folders are not automatically reused or merged. For targeted repeats, keep `scan_dir` pointing to the saved scans and select only the required `input_rows`. The resulting summary contains those selected rows. A consolidated recovery/merge workflow is not implemented yet.
+Each run creates a new `review-<scan-id>` folder, with numbered suffixes for repeats. Existing results are preserved. **All selected rows receive fresh assessments**; completed results from earlier review folders are not automatically reused or merged. For targeted repeats, keep `scan_dir` pointing to the saved scans and select only the required `input_rows`. The resulting summary contains those selected rows. Use the separate merge script below to combine it with earlier completed assessments.
 
 The editable prompt is [docs/grouped-review-prompt.md](docs/grouped-review-prompt.md). It requests five separate assessments: variable/metadata, grid/spatial coverage, time coverage, variable values, and source/processing. Each has a result, concrete finding and next action. PASS means no actionable issue within the performed checks; FAIL identifies a demonstrated problem or unmet explicit requirement; REVIEW asks for a specific verification; NOT_CHECKED identifies unavailable essential checking. Missing required history remains a documentation FAIL confined to source/processing, rather than failing every category. Existing deterministic failures cannot be dismissed by a model PASS.
 
@@ -118,6 +119,31 @@ For an already completed grouped review, run `run_experiments/summarise_grouped_
 
 The scan's `review_index.csv` and the grouped review's `pilot_index.csv` have different purposes. Set `scan_dir` to the scan folder and `review_dir` to the grouped review folder. Old single-verdict summaries do not have the five-group schema and cannot be passed to the grouped summary script.
 
+## 4. Merge full and partial reviews
+
+Open `run_experiments/merge_reviews.R`. Set `review_dirs` to grouped-review folders **in order from oldest to newest**, with the original full review first, then subsequent trials or retries:
+
+```r
+review_dirs <- c(
+  "output/review-original",
+  "output/review-single-file-retry",
+  "output/review-remaining-files"
+)
+```
+
+These are examples: use actual review folders containing both `summary.csv` and `pilot_index.csv`. The list order defines priority explicitly; filesystem timestamps are not used. Set `output_dir` and `heatmap_rows_per_page` at the top, then run the whole script. No credentials, source data, rescans or LLM calls are needed.
+
+The merge uses **full data paths**, preserving first-seen file order. For each file it selects the newest assessment whose scan and LLM review both completed. A later API error, token limit, preparation failure or pending request cannot replace an earlier completed assessment. A completed assessment is selected as a whole: its FAIL, REVIEW and NOT_CHECKED categories are retained, even if older results were PASS. If no completed assessment exists, the latest available execution status and deterministic findings remain visible. Pending files without saved group rows appear as NOT_CHECKED. Equal basenames in different directories stay separate; `/home/...` and `/mnt/...` aliases are not automatically equated. Confirm that the supplied reviews concern the intended file versions; the merge does not verify source content identity.
+
+Outputs go into a new, numbered-if-needed `merge-<id>` folder. Original reviews remain unchanged. It contains:
+
+- `summary.csv`, `summary_short.csv`, `flagged_files.csv` and PNG/PDF heatmaps in the existing grouped formats. `summarise_grouped_review.R` can regenerate this merged overview later.
+- `pilot_index.csv`: the selected execution status and original report references per file, with `selected_review_dir`, `selected_review_order` and `selection_reason`. Individual detailed reports stay in their original review folders.
+- `review_changes.csv`: category verdict changes between consecutive completed assessments in the supplied order, including old/new findings, next actions and originating review folders. PASS-to-NOT_CHECKED changes are recorded too. An empty file with column headers means no comparable verdicts changed. Failed API attempts are not treated as completed scientific assessments.
+- `review_sources.csv`: the ordered input folders and checksums of their summary/index CSVs; `merge-settings.json` and `run-lineage.json` record the merge settings and origin. No numerical scan statistics are recalculated or consolidated; existing `data_overview.csv` files remain in their original runs.
+
+Keep original review folders available so report references remain usable. A merged folder can itself be an input to a later merge; its source-list files preserve the chain back to earlier reviews.
+
 ## General LLM queries
 
 Use `run_experiments/query_llm.R` independently of scans. Set the model, token budget, prompt sections, evidence and output directory near the top. Run with `send_to_api = FALSE` to preview, then explicitly enable submission. A successful call saves the response as `response.md`, with the prompt and metadata in its own `llm-*` folder. Explicit text attachments are included verbatim without automatic redaction. The model has no browsing, file access, tools or prior-call memory. Its general-query budget remains separate from the grouped review defaults.
@@ -126,7 +152,7 @@ Use `run_experiments/query_llm.R` independently of scans. Set the model, token b
 
 Run `Rscript tests/run_all.R` from the root. Tests use synthetic data and mock model calls, never real credentials or live inference. Representative server files are still needed to evaluate scientific usefulness and runtime.
 
-For removed entrypoints and preservation of existing reports/settings, see [migration](docs/migration.md). Significant milestones are in [history](docs/history.md). Existing cached outputs and reusable helpers remain intact. Current limitations include no interrupted-scan resume, automatic cache freshness verification, automatic consolidation of separate review runs, arbitrary multi-level grids or independent reference-product/mask comparisons.
+For removed entrypoints and preservation of existing reports/settings, see [migration](docs/migration.md). Significant milestones are in [history](docs/history.md). Existing cached outputs and reusable helpers remain intact. Current limitations include no interrupted-scan resume, automatic cache freshness verification, arbitrary multi-level grids or independent reference-product/mask comparisons.
 
 Earlier previews may contain damaged CDO ranges such as `seltimestep,1[PATH REDACTED]`. The current sanitizer preserves `seltimestep,1/20`, but cannot recover text already lost in an old preview. Use fresh scans or the retained `refresh_saved_history()` helper in `source/refresh_history.R` before relying on affected evidence.
 

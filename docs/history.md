@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-21 — Merge saved grouped reviews in a separate script
+
+- Add merge_reviews.R as the fifth configured script, with reusable functions in source/merge_reviews.R. Accept an explicit oldest-to-newest list of review folders and select each full data path's newest completed whole-file assessment. Retain completed NOT_CHECKED categories and preserve older completed reviews when later calls fail; keep latest deterministic findings/status where no assessment completed.
+- Produce one combined detailed/short summary, flagged rows and heatmap in a new merge folder. Record selected original report references, ordered input CSV checksums and category verdict changes with old/new findings. Preserve all input reviews; no source data, credentials or model calls are required.
+- Validate full-path identity, explicit priority, completion guards, changed-verdict traceability, pending files, schema rejection, export and unchanged source CSVs. Keep model/scientific settings unchanged.
+
 ## 2026-10-21 — Keep four configured workflow scripts
 
 - Keep only scan_files.R, review_grouped_scans.R, summarise_grouped_review.R and query_llm.R in run_experiments/. Delete the redundant/older runners instead of presenting competing workflows; automatic path preflight stays part of scanning, and input_rows supports both small trials and full reviews.

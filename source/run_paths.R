@@ -27,7 +27,7 @@ new_scan_directory <- function(output_dir) {
   run
 }
 linked_run_directory <- function(parent_dir, output_dir, stage) {
-  if (!stage %in% c("scan", "review", "rerun")) stop("Unsupported run stage.")
+  if (!stage %in% c("scan", "review", "rerun", "merge")) stop("Unsupported run stage.")
   id <- scan_run_id(parent_dir)
   # mkdir reserves a name atomically: never reuse or overwrite an existing run.
   start <- if (stage == "rerun") 1L else 0L
