@@ -45,6 +45,9 @@ stopifnot(identical(short$data_file_path, c(a, b, c, d, e)), nrow(merged$summary
   file.exists(file.path(merged$run_dir, "summary_heatmap.pdf")),
   all(c("summary.csv", "pilot_index.csv", "review_changes.csv", "review_sources.csv", "merge-settings.json",
     "flagged_files.csv", "run-lineage.json") %in% list.files(merged$run_dir)))
+labels <- review_heatmap_table(short, merged$index)$filename_label
+stopifnot(grepl("review-fixture/file-3", labels[3], fixed = TRUE),
+  grepl("review-fixture-02/file-1", labels[1], fixed = TRUE))
 trace <- read.csv(file.path(merged$run_dir, "review_sources.csv"), stringsAsFactors = FALSE)
 stopifnot(identical(trace$review_dir, normalizePath(c(old, retry))),
   jsonlite::read_json(file.path(merged$run_dir, "run-lineage.json"))$stage == "merge")

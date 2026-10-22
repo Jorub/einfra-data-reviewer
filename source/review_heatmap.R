@@ -3,27 +3,27 @@ review_heatmap_style <- function() list(
   colours = c(PASS = "#B9DEC5", FAIL = "#E9A29B", REVIEW = "#F5D78D", NOT_CHECKED = "#E4E7EB"),
   foreground = "#202A33", background = "white", font = "sans",
   filename_pt = 8.5, status_pt = 8.5, heading_pt = 10, title_pt = 14,
-  cell_width = 1.45, row_height = 0.26, margin = 0.3,
+  cell_width = 1.45, row_height = 0.34, margin = 0.3,
   headings = c("Variable /\nmetadata", "Spatial\ncoverage", "Time\ncoverage", "Variable\nvalues", "Source /\nprocessing"))
 
-# Keep basenames intact; add only enough parent-folder context to distinguish duplicates.
-review_filename_labels <- function(paths) {
-  normal <- gsub("\\\\", "/", paths)
-  labels <- basename(normal)
-  for (name in unique(labels[duplicated(labels)])) {
-    rows <- which(labels == name)
-    parts <- strsplit(dirname(normal[rows]), "/", fixed = TRUE)
-    depth <- 1L
-    repeat {
-      context <- vapply(parts, function(x) paste(tail(x[nzchar(x)], depth), collapse = "/"), character(1))
-      if (!anyDuplicated(context) || depth >= max(lengths(parts))) break
-      depth <- depth + 1L
-    }
-    labels[rows] <- paste0(name, " [", context, "]")
+# Match saved report folders by full data identity, never infer them from row numbers.
+review_filename_labels <- function(paths, index = NULL) {
+  filenames <- basename(gsub("\\\\", "/", paths))
+  references <- rep("Report folder unavailable", length(paths))
+  if (!is.null(index)) {
+    if (!all(c("data_file_path", "report_path") %in% names(index)) ||
+        anyNA(index$data_file_path) || anyDuplicated(index$data_file_path))
+      stop("Heatmap requires unique data_file_path/report_path mappings in pilot_index.csv.")
+    matched <- index$report_path[match(paths, index$data_file_path)]
+    available <- !is.na(matched) & nzchar(trimws(matched))
+    references[available] <- vapply(matched[available], function(path) {
+      parts <- strsplit(gsub("\\\\", "/", path), "/", fixed = TRUE)[[1]]
+      paste(tail(parts[nzchar(parts) & parts != "."], 2), collapse = "/")
+    }, character(1))
   }
-  labels
+  paste0(filenames, "\n[", references, "]")
 }
-review_heatmap_table <- function(short) {
+review_heatmap_table <- function(short, index = NULL) {
   groups <- grouped_check_names()
   statuses <- names(review_heatmap_style()$colours)
   if (!all(c("data_file_path", groups) %in% names(short)) || !nrow(short))
@@ -31,7 +31,7 @@ review_heatmap_table <- function(short) {
   if (!is.character(short$data_file_path) || anyNA(short$data_file_path) || anyDuplicated(short$data_file_path) ||
       any(!nzchar(short$data_file_path)) || anyNA(short[groups]) || any(!unlist(short[groups]) %in% statuses))
     stop("Heatmap input has missing/duplicate paths or unsupported statuses; inspect summary_short.csv.")
-  data.frame(short[c("data_file_path", groups)], filename_label = review_filename_labels(short$data_file_path),
+  data.frame(short[c("data_file_path", groups)], filename_label = review_filename_labels(short$data_file_path, index),
     stringsAsFactors = FALSE, check.names = FALSE)
 }
 validate_heatmap_pages <- function(rows_per_page) {
@@ -69,7 +69,7 @@ draw_review_heatmap <- function(table, page, pages, total, dimensions, style) {
   text(legend, legend_x, height - 0.98, style$status_pt)
   centres <- left + (seq_len(5) - 0.5) * style$cell_width
   text(style$headings, centres, top + 0.27, style$heading_pt, bold = TRUE)
-  text("Dataset file", left - 0.12, top + 0.27, style$heading_pt, just = "right", bold = TRUE)
+  text("Dataset file / report", left - 0.12, top + 0.27, style$heading_pt, just = "right", bold = TRUE)
   y <- top - (seq_len(nrow(table)) - 0.5) * style$row_height
   text(table$filename_label, left - 0.12, y, style$filename_pt, just = "right")
   statuses <- unname(unlist(table[grouped_check_names()], use.names = FALSE))
@@ -90,7 +90,9 @@ write_review_heatmap <- function(review_dir, rows_per_page = 50L, dpi = 300L) {
     stop("Heatmap dpi must be between 72 and 600.")
   input <- file.path(review_dir, "summary_short.csv")
   if (!file.exists(input)) stop("Grouped summary_short.csv not found in review_dir.")
-  table <- review_heatmap_table(read.csv(input, stringsAsFactors = FALSE))
+  index_file <- file.path(review_dir, "pilot_index.csv")
+  index <- if (file.exists(index_file)) read.csv(index_file, stringsAsFactors = FALSE) else NULL
+  table <- review_heatmap_table(read.csv(input, stringsAsFactors = FALSE), index)
   style <- review_heatmap_style()
   dimensions <- review_heatmap_dimensions(table$filename_label, min(nrow(table), rows_per_page), style)
   rows <- split(seq_len(nrow(table)), ceiling(seq_len(nrow(table)) / rows_per_page))

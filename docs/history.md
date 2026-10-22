@@ -2,6 +2,11 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-22 — Identify saved report folders on the heatmap
+
+- Label every file with its originating review/file report folder from pilot_index.csv, matching by full data path. Merged results retain the selected original report identifier; plotting never derives file numbers from row positions or displays data-directory paths.
+- Allow space for a second label line and explicitly mark unavailable report mappings. Regenerate locally through summarise_grouped_review.R with no rescan or LLM call. Verify shuffled indexes, partial reviews, merged report references, unchanged CSVs and PNG/PDF exports.
+
 ## 2026-10-21 — Merge saved grouped reviews in a separate script
 
 - Add merge_reviews.R as the fifth configured script, with reusable functions in source/merge_reviews.R. Accept an explicit oldest-to-newest list of review folders and select each full data path's newest completed whole-file assessment. Retain completed NOT_CHECKED categories and preserve older completed reviews when later calls fail; keep latest deterministic findings/status where no assessment completed.

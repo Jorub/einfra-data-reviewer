@@ -6,19 +6,26 @@ paths <- c("/sourceA/raw/shared.nc", "/sourceB/raw/shared.nc", "/sourceA/process
 short <- data.frame(data_file_path = paths)
 statuses <- c("PASS", "FAIL", "REVIEW", "NOT_CHECKED")
 for (i in seq_along(grouped_check_names())) short[[grouped_check_names()[i]]] <- rep(statuses, length.out = 6)
-table <- review_heatmap_table(short)
+index <- data.frame(data_file_path = rev(paths),
+  report_path = rev(file.path("output", c(rep("review-original", 3), rep("review-retry", 3)),
+    c("file-001", "file-014", "file-019", "file-012", "file-018", "file-035"))))
+table <- review_heatmap_table(short, index)
 stopifnot(identical(table$data_file_path, paths), !anyDuplicated(table$filename_label),
-  all(grepl("shared.nc [", table$filename_label[1:3], fixed = TRUE)),
-  grepl("sourceA/raw", table$filename_label[1], fixed = TRUE),
+  all(grepl("shared.nc\n[", table$filename_label[1:3], fixed = TRUE)),
+  grepl("review-original/file-014", table$filename_label[2], fixed = TRUE),
+  grepl("review-retry/file-012", table$filename_label[4], fixed = TRUE),
+  !any(grepl("sourceA|sourceB|/unique", table$filename_label)),
   identical(table[grouped_check_names()], short[grouped_check_names()]))
 write.csv(short, file.path(work, "summary_short.csv"), row.names = FALSE)
+write.csv(index, file.path(work, "pilot_index.csv"), row.names = FALSE)
+index_before <- tools::md5sum(file.path(work, "pilot_index.csv"))
 before <- tools::md5sum(file.path(work, "summary_short.csv"))
 api_request <- function(...) stop("Unexpected model call")
 set_api_key <- function(...) stop("Unexpected credential access")
 device <- grDevices::dev.cur()
 drawn <- list(); real_draw <- draw_review_heatmap
 draw_review_heatmap <- function(table, page, pages, total, dimensions, style) {
-  drawn[[length(drawn) + 1L]] <<- list(paths = table$data_file_path, statuses = table[grouped_check_names()], page = page)
+  drawn[[length(drawn) + 1L]] <<- list(paths = table$data_file_path, statuses = table[grouped_check_names()], labels = table$filename_label, page = page)
   real_draw(table, page, pages, total, dimensions, style)
 }
 files <- write_review_heatmap(work, rows_per_page = 2, dpi = 72)
@@ -28,7 +35,8 @@ stopifnot(length(files) == 4, all(file.exists(files)), all(file.info(files)$size
 for (page in 1:3) {
   rows <- ((page - 1) * 2 + 1):(page * 2)
   stopifnot(identical(drawn[[page]]$paths, paths[rows]), identical(drawn[[page + 3]]$paths, paths[rows]),
-    identical(drawn[[page]]$statuses, short[rows, grouped_check_names()]))
+    identical(drawn[[page]]$statuses, short[rows, grouped_check_names()]),
+    identical(drawn[[page]]$labels, table$filename_label[rows]))
 }
 pdf <- file(files[1], "rb"); signature <- readBin(pdf, "raw", 5); close(pdf)
 stopifnot(rawToChar(signature) == "%PDF-")
@@ -47,5 +55,11 @@ bad <- short; bad$data_file_path[2] <- bad$data_file_path[1]
 stopifnot(inherits(try(review_heatmap_table(bad), silent = TRUE), "try-error"))
 for (invalid in list(0, 101, 1.5, NA_real_, Inf, "50"))
   stopifnot(inherits(try(validate_heatmap_pages(invalid), silent = TRUE), "try-error"))
+stopifnot(identical(index_before, tools::md5sum(file.path(work, "pilot_index.csv"))))
+missing <- index[-1, ]
+stopifnot(grepl("Report folder unavailable", review_filename_labels(paths, missing)[6], fixed = TRUE),
+  all(grepl("Report folder unavailable", review_filename_labels(paths), fixed = TRUE)))
+duplicated_index <- rbind(index, index[1, ])
+stopifnot(inherits(try(review_heatmap_table(short, duplicated_index), silent = TRUE), "try-error"))
 unlink(work, recursive = TRUE)
-cat("Heatmap passed: exact categorical results/order, duplicate filename context, PNG/PDF exports, pagination, device cleanup, stale-page handling and unchanged source CSV. No data/model/credential access.\n")
+cat("Heatmap passed: exact categorical results/order, saved report identifiers, path-based matching, missing-index labels, PNG/PDF exports, pagination, device cleanup, stale-page handling and unchanged source CSV. No data/model/credential access.\n")
