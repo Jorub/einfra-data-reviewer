@@ -9,7 +9,7 @@ response <- list(results = lapply(grouped_check_names(), function(group) list(gr
   finding = paste("Synthetic supplied checks inspected for", group), next_action = "None required.")))
 text <- as.character(jsonlite::toJSON(response, auto_unbox = TRUE))
 parsed <- parse_grouped_response(text)
-stopifnot(nrow(parsed) == 5, all(parsed$result == "PASS"))
+stopifnot(nrow(parsed) == length(grouped_check_names()), all(parsed$result == "PASS"))
 bad <- response; bad$results[[5]]$group <- bad$results[[1]]$group
 stopifnot(is.null(parse_grouped_response(jsonlite::toJSON(bad, auto_unbox = TRUE))))
 bad <- response; bad$results[[1]]$finding <- ""
@@ -24,7 +24,8 @@ protected <- checks; protected$status[protected$check == "history_provenance"] <
 protected$detail[protected$check == "history_provenance"] <- "Required history is absent"
 results <- guard_grouped_results(protected, parsed)
 stopifnot(results$result[results$group == "source_and_processing"] == "FAIL",
-  all(results$result[results$group != "source_and_processing"] == "PASS"))
+  all(results$result[results$group %in% legacy_grouped_check_names()[1:4]] == "PASS"),
+  results$result[results$group == "mask_provenance"] == "NOT_CHECKED")
 # Unavailable time checks cannot become a model PASS.
 gap <- checks; gap$status[gap$check == "time_coverage"] <- "NOT_CHECKED"
 stopifnot(guard_grouped_results(gap, parsed)$result[3] == "NOT_CHECKED")
@@ -103,7 +104,7 @@ stopifnot(identical(before_summary, tools::md5sum(file.path(trial$run_dir, "summ
   identical(short, read.csv(file.path(trial$run_dir, "summary_short.csv"))), api_calls == 3,
   all(file.exists(file.path(trial$run_dir, c("summary_heatmap.png", "summary_heatmap.pdf")))))
 stopifnot(api_calls == 3, identical(trial$index$llm_status, c("TOKEN_LIMIT", "COMPLETED", "INVALID_RESPONSE")),
-  nrow(summary) == 15, identical(names(summary), c("data_file_path", "check_group", "result", "finding", "next_action")),
+  nrow(summary) == 3 * length(grouped_check_names()), identical(names(summary), c("data_file_path", "check_group", "result", "finding", "next_action")),
   all(summary$result[summary$data_file_path == "/fake/1.nc"] == "NOT_CHECKED"),
   sum(summary$result[summary$data_file_path == "/fake/2.nc"] == "FAIL") == 1,
   all(summary$result[summary$data_file_path == "/fake/3.nc"] == "NOT_CHECKED"),
@@ -121,4 +122,4 @@ plot_failed <- withCallingHandlers(run_grouped_pilot(scan, work, input_rows = 1,
 stopifnot(any(grepl("saved CSV/model results remain intact", warnings, fixed = TRUE)),
   file.exists(file.path(plot_failed$run_dir, "summary_short.csv")), plot_failed$index$llm_status == "NOT_RUN")
 unlink(work, recursive = TRUE)
-cat("Grouped pilot passed: exact five-group schema, per-group guards, known unit equivalence, preview privacy, cached-only execution, token/schema errors and preserved scans. No live API calls.\n")
+cat("Grouped pilot passed: exact six-group schema, per-group guards, known unit equivalence, preview privacy, cached-only execution, token/schema errors and preserved scans. No live API calls.\n")

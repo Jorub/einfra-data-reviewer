@@ -1,5 +1,6 @@
 source("source/netcdf_families.R")
 source("source/netcdf_time.R")
+source("source/mask_provenance.R")
 
 # Filename claims are the expected contract. Do not silently repair malformed names.
 parse_netcdf_filename <- function(path) {
@@ -73,10 +74,11 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     stop("land_missing_range must be two ordered fractions in [0, 1].")
   filename <- parse_netcdf_filename(path)
   rows <- list()
+  mask_observation_local <- NULL
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v6-required-calendar", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v7-local-mask-evidence", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
     provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
@@ -89,6 +91,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     essential <- c("coordinate_dimensions", "data_variable", "additional_data_variables", "extra_dimensions", "resolution_code", "time_coverage", "value_scan")
     evidence$blocking_gaps <- x$check[x$status == "NOT_CHECKED" & x$check %in% essential]
     attr(x, "review_evidence") <- evidence
+    if (!is.null(mask_observation_local)) attr(x, "local_mask_provenance") <- mask_observation_local
     x
   }
   add("filename_format", filename$valid, if (filename$valid) "Eight fields and valid YYYYMM endpoints" else paste(filename$issues, collapse = "; "))
@@ -125,6 +128,8 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   evidence$provenance_notes <- sanitize_history(provenance_notes, 2000L)$text
   evidence$processing_history <- if (is.null(history)) list(available = FALSE, present_in_file = history_present, included_in_payload = FALSE) else
     c(list(available = TRUE), sanitize_history(history))
+  mask_observation_local <- mask_history_observation(history, f$spatial_coverage,
+    "NetCDF history", visibility_limited = !include_history && history_present)
   find_dim <- function(kind) {
     hit <- names(n$dim)[vapply(n$dim, function(d) {
       name <- tolower(d$name); units <- tolower(d$units)

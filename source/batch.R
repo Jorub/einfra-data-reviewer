@@ -53,7 +53,7 @@ run_netcdf_reviews <- function(file_specs, output_dir, model = "thinker",
       after <- source_file_stamp(spec$path)
       attr(checked, "scan_record") <- list(scanner_version = attr(checked, "review_evidence")$checker_version,
         scan_time_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
-        scanner_files_md5 = as.list(tools::md5sum(c("source/netcdf.R", "source/netcdf_time.R", "source/netcdf_families.R"))),
+        scanner_files_md5 = as.list(tools::md5sum(c("source/netcdf.R", "source/netcdf_time.R", "source/netcdf_families.R", "source/mask_provenance.R"))),
         before = before, after = after,
         source_unchanged_during_scan = identical(before, after))
       checked

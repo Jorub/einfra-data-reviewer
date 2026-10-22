@@ -9,14 +9,14 @@ source("source/grouped_review.R")
 # Configuration ---------------------------------------------------------------
 scan_dir <- ""                          # saved scan folder for all Ithaca paper input files
 output_dir <- "output"
-input_rows <- NULL                      # NULL = every row; optionally select c(1, 5, 13)
+input_rows <- NULL                      # NULL = every row; test a few files with c(1, 5, 19)
 model <- "thinker"
 max_tokens <- 20000L
 reasoning_effort <- NULL
 max_input_bytes <- 64000L
 request_timeout <- 600                  # maximum seconds for each complete API request
 connection_timeout <- 20                # maximum seconds to establish the connection
-max_concurrent_requests <- 4L           # 1 = sequential; account-wide maximum is 4
+max_concurrent_requests <- 1L           # sequential after observed HTTP 429 errors; maximum 4
 heatmap_rows_per_page <- 50L             # PNG/PDF overview pagination
 prompt_file <- "docs/grouped-review-prompt.md"
 credentials_file <- path.expand("~/.config/einfra-data-reviewer/credentials.R")

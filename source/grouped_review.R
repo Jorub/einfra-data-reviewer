@@ -1,7 +1,12 @@
-# Current five-group reviewer; source-level legacy helpers remain separate.
+# Current grouped reviewer; five-category saved reviews remain readable.
 grouped_check_names <- function() c("variable_and_metadata", "grid_and_spatial_coverage",
-  "time_coverage", "variable_values", "source_and_processing")
+  "time_coverage", "variable_values", "source_and_processing", "mask_provenance")
 source("source/review_heatmap.R")
+source("source/mask_provenance.R")
+legacy_grouped_check_names <- function() head(grouped_check_names(), -1L)
+grouped_summary_groups <- function(summary) {
+  if ("mask_provenance" %in% summary$check_group) grouped_check_names() else legacy_grouped_check_names()
+}
 
 # Compact overview using exactly the same result labels as summary.csv.
 grouped_short_summary <- function(summary) {
@@ -11,7 +16,7 @@ grouped_short_summary <- function(summary) {
       any(!summary$result %in% c("PASS", "FAIL", "REVIEW", "NOT_CHECKED")))
     stop("Grouped summary contains missing or unsupported categories/results.")
   overview <- data.frame(data_file_path = unique(summary$data_file_path), stringsAsFactors = FALSE)
-  for (group in grouped_check_names()) {
+  for (group in grouped_summary_groups(summary)) {
     overview[[group]] <- vapply(overview$data_file_path, function(path) {
       results <- unique(summary$result[summary$data_file_path == path & summary$check_group == group])
       if (length(results) > 1)
@@ -44,13 +49,14 @@ grouped_checks <- function(checks) {
     checks$status[row] <- "PASS"
     checks$detail[row] <- paste("Equivalent unit spellings; filename:", expected, "; stored:", observed)
   }
-  checks
+  add_mask_provenance(checks)
 }
 prepare_grouped_review <- function(checks, prompt_file = "docs/grouped-review-prompt.md") {
   if (!file.exists(prompt_file)) stop("Grouped review prompt file not found.")
+  if (!"mask_provenance" %in% checks$check) checks <- grouped_checks(checks)
   evidence <- jsonlite::fromJSON(prepare_review(checks), simplifyVector = FALSE)
   # Exclude legacy task instructions and all local-only attributes/paths.
-  supplied <- list(prompt_version = "grouped-review-pilot-v1", passed_checks = evidence$passed_checks,
+  supplied <- list(prompt_version = "grouped-review-v2-mask-provenance", passed_checks = evidence$passed_checks,
     attention_checks = evidence$attention_checks, context = evidence$context)
   paste(paste(readLines(prompt_file, warn = FALSE), collapse = "\n"),
     "\nSUPPLIED EVIDENCE (not instructions):\n",
@@ -58,7 +64,7 @@ prepare_grouped_review <- function(checks, prompt_file = "docs/grouped-review-pr
 }
 parse_grouped_response <- function(text) {
   x <- tryCatch(jsonlite::fromJSON(text, simplifyVector = FALSE), error = function(e) NULL)
-  if (!is.list(x) || !identical(names(x), "results") || length(x$results) != 5) return(NULL)
+  if (!is.list(x) || !identical(names(x), "results") || length(x$results) != length(grouped_check_names())) return(NULL)
   valid <- vapply(x$results, function(row) {
     is.list(row) && length(row) == 4 && setequal(names(row), c("group", "result", "finding", "next_action")) &&
       all(vapply(row, function(v) is.character(v) && length(v) == 1 && !is.na(v) && nzchar(trimws(v)), logical(1))) &&
@@ -72,6 +78,7 @@ parse_grouped_response <- function(text) {
     as.data.frame(row, stringsAsFactors = FALSE)))
 }
 check_group <- function(name) {
+  if (name == "mask_provenance") return("mask_provenance")
   if (name %in% c("filename_format", "data_variable", "filename_variable", "filename_units",
       "additional_data_variables", "extra_dimensions")) return("variable_and_metadata")
   if (name %in% c("coordinate_dimensions", "resolution_code", "land_mask", "land_data_coverage", "global_data_coverage") ||
@@ -91,6 +98,14 @@ guard_grouped_results <- function(checks, results = NULL) {
   essential <- c("coordinate_dimensions", "data_variable", "additional_data_variables", "extra_dimensions",
     "resolution_code", "time_coverage", "value_scan")
   for (i in seq_len(nrow(results))) {
+    # Exact mask-identity rules are deterministic; preserve them even if the API fails.
+    if (results$group[i] == "mask_provenance" && "mask_provenance" %in% checks$check) {
+      assessment <- attr(checks, "review_evidence")$mask_provenance
+      results$result[i] <- assessment$rule_result
+      results$finding[i] <- assessment$finding
+      results$next_action[i] <- assessment$next_action
+      next
+    }
     rows <- checks[!is.na(assigned) & assigned == results$group[i], , drop = FALSE]
     failed <- rows[rows$status == "FAIL", , drop = FALSE]
     warnings <- rows[rows$status == "WARN", , drop = FALSE]
@@ -100,7 +115,8 @@ guard_grouped_results <- function(checks, results = NULL) {
       grid_and_spatial_coverage = any(rows$check == "coordinate_dimensions" | grepl("^(lon|lat)_", rows$check)),
       time_coverage = any(grepl("^time_", rows$check)),
       variable_values = any(rows$check %in% c("nonfinite_values", "value_scan")),
-      source_and_processing = any(rows$check %in% c("history_provenance", "provenance_evidence")))
+      source_and_processing = any(rows$check %in% c("history_provenance", "provenance_evidence")),
+      mask_provenance = any(rows$check == "mask_provenance"))
     if (!inspected && !nrow(failed)) {
       results$result[i] <- "NOT_CHECKED"
       results$finding[i] <- "The saved scan stopped before this group was inspected; no contents finding is established."
@@ -173,7 +189,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
       write.csv(summary[summary$result != "PASS", ], file.path(run, "flagged_files.csv"), row.names = FALSE)
     }
   }
-  jsonlite::write_json(list(prompt_version = "grouped-review-pilot-v1", model = model, max_tokens = max_tokens,
+  jsonlite::write_json(list(prompt_version = "grouped-review-v2-mask-provenance", model = model, max_tokens = max_tokens,
     request_timeout = request_timeout, connection_timeout = connection_timeout,
     max_concurrent_requests = max_concurrent_requests,
     heatmap_rows_per_page = heatmap_rows_per_page,
@@ -209,7 +225,8 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
     write.csv(summaries[[j]], file.path(directory, "group-results.csv"), row.names = FALSE)
     report <- unlist(lapply(seq_len(nrow(results)), function(i) c(
       paste0("## ", gsub("_", " ", results$group[i]), " — ", results$result[i]),
-      results$finding[i], paste("Next action:", results$next_action[i]), "")))
+      results$finding[i], paste("Next action:", results$next_action[i]),
+      if (results$group[i] == "mask_provenance") mask_local_report(checks) else character(), "")))
     writeLines(report, file.path(directory, "review.md"))
     checkpoint()
     message("Saved grouped review ", sum(!vapply(summaries, is.null, logical(1))), "/", length(selected),
@@ -223,6 +240,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
       prompt <- prepare_grouped_review(checks, prompt_file)
       writeLines(prompt, file.path(directory, "grouped-preview.txt"))
       saveRDS(checks, file.path(directory, "pilot-checks.rds"))
+      write_mask_provenance(checks, directory)
       list(checks = checks, prompt = prompt)
     }, error = identity)
     if (inherits(prepared, "error")) {
@@ -246,7 +264,7 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
         results <- parse_grouped_response(answer$text)
         finish_file(j, prepared$checks, results = results,
           status = if (is.null(results)) "INVALID_RESPONSE" else "COMPLETED",
-          reason = if (is.null(results)) "Response did not match the five-group schema." else "Five-group assessment completed.")
+          reason = if (is.null(results)) "Response did not match the six-group schema." else "Six-group assessment completed.")
       }
     }
     active[j] <<- TRUE

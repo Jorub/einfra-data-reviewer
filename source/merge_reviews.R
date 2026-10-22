@@ -14,7 +14,7 @@ read_merge_review <- function(review_dir) {
   summary_columns <- c("data_file_path", "check_group", "result", "finding", "next_action")
   index_columns <- c("data_file_path", "filename", "checks_status", "llm_status", "reason", "report_path")
   if (!all(summary_columns %in% names(summary)) || !all(index_columns %in% names(index)))
-    stop("Expected five-group summary and completion-index schemas: ", review_dir)
+    stop("Expected grouped summary and completion-index schemas: ", review_dir)
   if (!nrow(index) || anyNA(index[index_columns]) || any(!nzchar(trimws(index$data_file_path))) ||
       anyDuplicated(index$data_file_path) || any(!grepl("^(/|[A-Za-z]:[/\\\\])", index$data_file_path)))
     stop("Review index must identify each file once using its full data path: ", review_dir)
@@ -25,8 +25,8 @@ read_merge_review <- function(review_dir) {
     stop("Invalid grouped summary fields, results or file identities: ", review_dir)
   for (i in seq_len(nrow(index))) {
     rows <- summary[summary$data_file_path == index$data_file_path[i], summary_columns, drop = FALSE]
-    if (nrow(rows) && (nrow(rows) != length(grouped_check_names()) ||
-        anyDuplicated(rows$check_group) || !setequal(rows$check_group, grouped_check_names())))
+    if (nrow(rows) && (anyDuplicated(rows$check_group) ||
+        !(setequal(rows$check_group, grouped_check_names()) || setequal(rows$check_group, legacy_grouped_check_names()))))
       stop("Each assessed file must have exactly one row per check group: ", index$data_file_path[i])
     if (!nrow(rows) && index$llm_status[i] == "COMPLETED")
       stop("Completed assessment has no saved group results: ", index$data_file_path[i])
@@ -35,13 +35,17 @@ read_merge_review <- function(review_dir) {
     summary_md5 = unname(tools::md5sum(summary_file)), index_md5 = unname(tools::md5sum(index_file)))
 }
 
-merge_review_rows <- function(review, path) {
+merge_review_rows <- function(review, path, groups = grouped_check_names()) {
   rows <- review$summary[review$summary$data_file_path == path, , drop = FALSE]
-  if (!nrow(rows)) rows <- data.frame(data_file_path = path, check_group = grouped_check_names(),
+  if (!nrow(rows)) rows <- data.frame(data_file_path = path, check_group = groups,
     result = "NOT_CHECKED", finding = "No assessment was saved for this file in the selected review.",
     next_action = "Inspect pilot_index.csv and complete the assessment using saved scan evidence.",
     stringsAsFactors = FALSE)
-  rows[match(grouped_check_names(), rows$check_group),
+  missing <- setdiff(groups, rows$check_group)
+  if (length(missing)) rows <- rbind(rows, data.frame(data_file_path = path, check_group = missing,
+    result = "NOT_CHECKED", finding = "Mask provenance was not assessed in this earlier five-category review.",
+    next_action = "Run a current grouped review using the saved scan evidence.", stringsAsFactors = FALSE))
+  rows[match(groups, rows$check_group),
     c("data_file_path", "check_group", "result", "finding", "next_action"), drop = FALSE]
 }
 
@@ -58,6 +62,8 @@ merge_grouped_reviews <- function(review_dirs, output_dir = "output", heatmap_ro
       any(!nzchar(trimws(review_dirs)))) stop("List review_dirs in order from oldest to newest.")
   validate_heatmap_pages(heatmap_rows_per_page)
   reviews <- lapply(path.expand(review_dirs), read_merge_review)
+  groups <- if (any(vapply(reviews, function(review) "mask_provenance" %in% review$summary$check_group, logical(1))))
+    grouped_check_names() else legacy_grouped_check_names()
   directories <- vapply(reviews, function(review) review$directory, character(1))
   if (anyDuplicated(directories)) stop("List each review folder only once.")
   if (!is.character(output_dir) || length(output_dir) != 1 || is.na(output_dir) || !nzchar(output_dir))
@@ -74,7 +80,7 @@ merge_grouped_reviews <- function(review_dirs, output_dir = "output", heatmap_ro
     }, logical(1))]
     selected <- tail(if (length(completed)) completed else candidates, 1)
     review <- reviews[[selected]]
-    summaries[[i]] <- merge_review_rows(review, path)
+    summaries[[i]] <- merge_review_rows(review, path, groups)
     row <- review$index[review$index$data_file_path == path, , drop = FALSE]
     row$selected_review_dir <- review$directory
     row$selected_review_order <- selected
@@ -84,7 +90,7 @@ merge_grouped_reviews <- function(review_dirs, output_dir = "output", heatmap_ro
     # Compare consecutive completed assessments, including NOT_CHECKED groups.
     if (length(completed) > 1) for (j in seq.int(2, length(completed))) {
       previous <- reviews[[completed[j - 1]]]; current <- reviews[[completed[j]]]
-      before <- merge_review_rows(previous, path); after <- merge_review_rows(current, path)
+      before <- merge_review_rows(previous, path, groups); after <- merge_review_rows(current, path, groups)
       changed <- which(before$result != after$result)
       if (length(changed)) changes[[length(changes) + 1L]] <- data.frame(
         data_file_path = path, check_group = before$check_group[changed],

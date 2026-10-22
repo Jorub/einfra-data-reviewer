@@ -7,8 +7,12 @@ make_review <- function(name, paths, statuses, values = list()) {
     llm_status = statuses, reason = ifelse(statuses == "COMPLETED", "Assessment completed.", "API HTTP 429."),
     report_path = file.path(folder, paste0("file-", seq_along(paths))), stringsAsFactors = FALSE)
   summary <- do.call(rbind, lapply(seq_along(paths), function(i) {
-    result <- if (statuses[i] == "COMPLETED") rep("PASS", 5) else rep("NOT_CHECKED", 5)
-    if (length(values) >= i && length(values[[i]])) result <- values[[i]]
+    result <- if (statuses[i] == "COMPLETED") rep("PASS", length(grouped_check_names())) else rep("NOT_CHECKED", length(grouped_check_names()))
+    if (length(values) >= i && length(values[[i]])) {
+      supplied <- values[[i]]
+      result[seq_along(supplied)] <- supplied
+      if (all(supplied == "REVIEW")) result[] <- "REVIEW"
+    }
     data.frame(data_file_path = paths[i], check_group = grouped_check_names(), result = result,
       finding = paste(name, basename(paths[i]), grouped_check_names()), next_action = "Synthetic next action.")
   }))
@@ -31,7 +35,7 @@ set_api_key <- function(...) stop("Unexpected credential access")
 check_netcdf <- function(...) stop("Unexpected NetCDF scan")
 merged <- merge_grouped_reviews(c(old, retry), output_dir = file.path(work, "output"))
 short <- read.csv(file.path(merged$run_dir, "summary_short.csv"), stringsAsFactors = FALSE)
-stopifnot(identical(short$data_file_path, c(a, b, c, d, e)), nrow(merged$summary) == 25,
+stopifnot(identical(short$data_file_path, c(a, b, c, d, e)), nrow(merged$summary) == 5 * length(grouped_check_names()),
   short$grid_and_spatial_coverage[1] == "NOT_CHECKED", short$variable_and_metadata[2] == "PASS",
   short$variable_and_metadata[3] == "FAIL", short$variable_and_metadata[4] == "FAIL",
   merged$index$llm_status[4] == "API_ERROR", all(short[5, -1] == "REVIEW"),
@@ -65,6 +69,19 @@ pending <- make_review("review-pending", "/data/pending.nc", "IN_PROGRESS")
 write.csv(read.csv(file.path(pending, "summary.csv"))[FALSE, ], file.path(pending, "summary.csv"), row.names = FALSE)
 partial <- merge_grouped_reviews(c(old, pending), output_dir = file.path(work, "output"))
 stopifnot(all(partial$summary$result[partial$summary$data_file_path == "/data/pending.nc"] == "NOT_CHECKED"))
+# Old five-group reviews remain usable; mixed runs mark unassessed masks explicitly.
+legacy <- make_review("review-legacy", c(a, b), c("COMPLETED", "COMPLETED"))
+legacy_summary <- read.csv(file.path(legacy, "summary.csv"))
+legacy_summary <- legacy_summary[legacy_summary$check_group != "mask_provenance", ]
+write.csv(legacy_summary, file.path(legacy, "summary.csv"), row.names = FALSE)
+legacy_only <- merge_grouped_reviews(legacy, output_dir = file.path(work, "output"))
+stopifnot(!"mask_provenance" %in% names(read.csv(file.path(legacy_only$run_dir, "summary_short.csv"))))
+new_partial <- make_review("review-current-partial", b, "COMPLETED")
+mixed <- merge_grouped_reviews(c(legacy, new_partial), output_dir = file.path(work, "output"))
+mixed_short <- read.csv(file.path(mixed$run_dir, "summary_short.csv"))
+stopifnot(mixed_short$mask_provenance[mixed_short$data_file_path == a] == "NOT_CHECKED",
+  mixed_short$mask_provenance[mixed_short$data_file_path == b] == "PASS",
+  !anyNA(mixed$summary), nrow(mixed$summary) == 2 * length(grouped_check_names()))
 # Invalid sources fail before allocating an output folder.
 expect_invalid <- function(dirs) {
   destination <- tempfile(tmpdir = work)

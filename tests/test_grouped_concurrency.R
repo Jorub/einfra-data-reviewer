@@ -14,7 +14,8 @@ for (i in 1:10) {
   dir.create(index$report_path[i])
   checks <- data.frame(check = c("filename_format", "data_variable", "coordinate_dimensions",
     "time_coverage", "nonfinite_values", "history_provenance"), status = "PASS", detail = "Synthetic evidence")
-  attr(checks, "review_evidence") <- list(filename = list(basename = index$filename[i], fields = list(units = "mm")),
+  attr(checks, "review_evidence") <- list(filename = list(basename = index$filename[i], fields = list(units = "mm", spatial_coverage = "land")),
+    processing_history = list(available = TRUE, text = "cdo mul oceanmask_ithaca_global_025.nc input.nc output.nc"),
     observed = list(variable = "e", units = "mm"))
   attr(checks, "local_tool_results") <- list(private = "FAKE_LOCAL_ONLY_SENTINEL")
   saveRDS(checks, file.path(index$report_path[i], "local-diagnostics.rds"))
@@ -83,8 +84,8 @@ stopifnot(last_pool$peak == 4L, identical(last_pool$started, c(1:6, 8:10)),
   identical(before, tools::md5sum(source_files)))
 summary <- read.csv(file.path(trial$run_dir, "summary.csv"))
 short <- read.csv(file.path(trial$run_dir, "summary_short.csv"))
-stopifnot(nrow(summary) == 50, nrow(short) == 10, identical(short$data_file_path, index$input_path),
-  all(short[1, -1] == "PASS"), all(short[2, -1] == "NOT_CHECKED"))
+stopifnot(nrow(summary) == 10 * length(grouped_check_names()), nrow(short) == 10, identical(short$data_file_path, index$input_path),
+  all(short[1, -1] == "PASS"), all(short[2, legacy_grouped_check_names()] == "NOT_CHECKED"), short$mask_provenance[2] == "PASS")
 settings <- jsonlite::read_json(file.path(trial$run_dir, "pilot-settings.json"))
 stopifnot(settings$max_concurrent_requests == 4)
 # Clean interruption cancels active local handles and retains completed checkpoints.
@@ -96,7 +97,7 @@ runs <- list.dirs(work, recursive = FALSE, full.names = TRUE)
 latest <- tail(runs[grepl("/review-", runs)], 1)
 saved <- read.csv(file.path(latest, "pilot_index.csv"))
 stopifnot(saved$llm_status[4] == "API_ERROR", all(saved$llm_status[c(1, 2, 3, 5)] == "INTERRUPTED"),
-  nrow(read.csv(file.path(latest, "summary.csv"))) == 5)
+  nrow(read.csv(file.path(latest, "summary.csv"))) == length(grouped_check_names()))
 for (invalid in list(0, 5, 1.5, NA_real_, Inf, "4", numeric()))
   stopifnot(inherits(try(validate_review_concurrency(invalid), silent = TRUE), "try-error"))
 unlink(work, recursive = TRUE)

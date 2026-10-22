@@ -19,6 +19,8 @@ refresh_history_checks <- function(checks, input_path) {
   refreshed <- c(list(available = TRUE), sanitize_history(raw$value))
   if (!identical(source_file_stamp(input_path), record$after)) stop("Source changed during header refresh.")
   evidence$processing_history <- refreshed
+  attr(checks, "local_mask_provenance") <- mask_history_observation(raw$value,
+    evidence$filename$fields$spatial_coverage, "refreshed NetCDF history")
   attr(checks, "review_evidence") <- evidence
   record$history_refresh <- list(time_utc = format(Sys.time(), tz = "UTC", usetz = TRUE),
     sanitizer_version = refreshed$sanitizer_version,

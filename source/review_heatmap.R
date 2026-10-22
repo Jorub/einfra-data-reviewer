@@ -4,7 +4,9 @@ review_heatmap_style <- function() list(
   foreground = "#202A33", background = "white", font = "sans",
   filename_pt = 8.5, status_pt = 8.5, heading_pt = 10, title_pt = 14,
   cell_width = 1.45, row_height = 0.34, margin = 0.3,
-  headings = c("Variable /\nmetadata", "Spatial\ncoverage", "Time\ncoverage", "Variable\nvalues", "Source /\nprocessing"))
+  headings = c(variable_and_metadata = "Variable /\nmetadata", grid_and_spatial_coverage = "Spatial\ncoverage",
+    time_coverage = "Time\ncoverage", variable_values = "Variable\nvalues",
+    source_and_processing = "Source /\nprocessing", mask_provenance = "Mask\nprovenance"))
 
 # Match saved report folders by full data identity, never infer them from row numbers.
 review_filename_labels <- function(paths, index = NULL) {
@@ -24,10 +26,10 @@ review_filename_labels <- function(paths, index = NULL) {
   paste0(filenames, "\n[", references, "]")
 }
 review_heatmap_table <- function(short, index = NULL) {
-  groups <- grouped_check_names()
+  groups <- if ("mask_provenance" %in% names(short)) grouped_check_names() else legacy_grouped_check_names()
   statuses <- names(review_heatmap_style()$colours)
   if (!all(c("data_file_path", groups) %in% names(short)) || !nrow(short))
-    stop("Provide a nonempty grouped summary_short.csv with all five categories.")
+    stop("Provide a nonempty grouped summary_short.csv with all five legacy or six current categories.")
   if (!is.character(short$data_file_path) || anyNA(short$data_file_path) || anyDuplicated(short$data_file_path) ||
       any(!nzchar(short$data_file_path)) || anyNA(short[groups]) || any(!unlist(short[groups]) %in% statuses))
     stop("Heatmap input has missing/duplicate paths or unsupported statuses; inspect summary_short.csv.")
@@ -40,12 +42,12 @@ validate_heatmap_pages <- function(rows_per_page) {
     stop("heatmap_rows_per_page must be an integer from 1 to 100.")
   invisible(NULL)
 }
-review_heatmap_dimensions <- function(labels, rows, style) {
+review_heatmap_dimensions <- function(labels, rows, style, groups = grouped_check_names()) {
   grDevices::pdf(NULL, family = style$font)
   on.exit(grDevices::dev.off(), add = TRUE)
   grob <- grid::textGrob(labels, gp = grid::gpar(fontsize = style$filename_pt, fontfamily = style$font))
   filename_width <- max(4.5, grid::convertWidth(grid::grobWidth(grob), "inches", valueOnly = TRUE) * 1.15 + 0.2)
-  list(filename_width = filename_width, width = 2 * style$margin + filename_width + 0.15 + 5 * style$cell_width,
+  list(filename_width = filename_width, width = 2 * style$margin + filename_width + 0.15 + length(groups) * style$cell_width,
     height = 2.3 + rows * style$row_height)
 }
 draw_review_heatmap <- function(table, page, pages, total, dimensions, style) {
@@ -55,6 +57,7 @@ draw_review_heatmap <- function(table, page, pages, total, dimensions, style) {
     x = grid::unit(x, "inches"), y = grid::unit(y, "inches"), just = just,
     gp = grid::gpar(fontsize = size, fontfamily = style$font, fontface = if (bold) "bold" else "plain",
       col = style$foreground))
+  groups <- intersect(grouped_check_names(), names(table))
   height <- dimensions$height
   left <- style$margin + dimensions$filename_width + 0.15
   top <- height - 1.75
@@ -67,13 +70,13 @@ draw_review_heatmap <- function(table, page, pages, total, dimensions, style) {
     width = grid::unit(1.4, "inches"), height = grid::unit(0.25, "inches"),
     gp = grid::gpar(fill = unname(style$colours), col = NA))
   text(legend, legend_x, height - 0.98, style$status_pt)
-  centres <- left + (seq_len(5) - 0.5) * style$cell_width
-  text(style$headings, centres, top + 0.27, style$heading_pt, bold = TRUE)
+  centres <- left + (seq_along(groups) - 0.5) * style$cell_width
+  text(style$headings[groups], centres, top + 0.27, style$heading_pt, bold = TRUE)
   text("Dataset file / report", left - 0.12, top + 0.27, style$heading_pt, just = "right", bold = TRUE)
   y <- top - (seq_len(nrow(table)) - 0.5) * style$row_height
   text(table$filename_label, left - 0.12, y, style$filename_pt, just = "right")
-  statuses <- unname(unlist(table[grouped_check_names()], use.names = FALSE))
-  x_cells <- rep(centres, each = nrow(table)); y_cells <- rep(y, times = 5)
+  statuses <- unname(unlist(table[groups], use.names = FALSE))
+  x_cells <- rep(centres, each = nrow(table)); y_cells <- rep(y, times = length(groups))
   grid::grid.rect(x = grid::unit(x_cells, "inches"), y = grid::unit(y_cells, "inches"),
     width = grid::unit(style$cell_width - 0.025, "inches"), height = grid::unit(style$row_height - 0.025, "inches"),
     gp = grid::gpar(fill = unname(style$colours[statuses]), col = NA))
@@ -94,7 +97,8 @@ write_review_heatmap <- function(review_dir, rows_per_page = 50L, dpi = 300L) {
   index <- if (file.exists(index_file)) read.csv(index_file, stringsAsFactors = FALSE) else NULL
   table <- review_heatmap_table(read.csv(input, stringsAsFactors = FALSE), index)
   style <- review_heatmap_style()
-  dimensions <- review_heatmap_dimensions(table$filename_label, min(nrow(table), rows_per_page), style)
+  dimensions <- review_heatmap_dimensions(table$filename_label, min(nrow(table), rows_per_page), style,
+    intersect(grouped_check_names(), names(table)))
   rows <- split(seq_len(nrow(table)), ceiling(seq_len(nrow(table)) / rows_per_page))
   pages <- length(rows)
   temporary <- tempfile(".heatmap-", tmpdir = review_dir); dir.create(temporary)

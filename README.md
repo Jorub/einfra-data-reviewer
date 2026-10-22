@@ -46,7 +46,7 @@ There are five configured scripts in `run_experiments/`:
 | Script | Purpose |
 | --- | --- |
 | `scan_files.R` | Check all input paths, scan the listed NetCDF files and save evidence. |
-| `review_grouped_scans.R` | Review saved scans with five separate LLM assessments. |
+| `review_grouped_scans.R` | Review saved scans with six separate category assessments. |
 | `summarise_grouped_review.R` | Regenerate the short summary and heatmap from saved grouped results. |
 | `merge_reviews.R` | Combine full and partial grouped reviews into one view without LLM calls. |
 | `query_llm.R` | Send a general editable prompt independently of the NetCDF workflow. |
@@ -77,11 +77,30 @@ Open `run_experiments/review_grouped_scans.R`. Set `scan_dir` to the saved scan 
 
 Run first with `send_to_api = FALSE` and inspect each `grouped-preview.txt`. Set TRUE and rerun to submit the selected evidence. This explicitly approves the built-in basename, selected metadata, diagnostics and redacted processing history. Raw arrays and full input paths are not automatically submitted. Redaction is best-effort: inspect previews and do not send confidential filenames or notes.
 
-The configured defaults are model `thinker`, **20,000 completion tokens**, `reasoning_effort = NULL`, a 64 kB input guard, **600 seconds** per request, **20 seconds** to connect, and **four concurrent requests**. Settings remain near the top of the runner and are recorded in `pilot-settings.json` and per-attempt metadata. Completion budgets can include reasoning. NULL omits the reasoning field and uses the provider default; support for explicit settings is model-dependent. A budget does not guarantee completion.
+The configured defaults are model `thinker`, **20,000 completion tokens**, `reasoning_effort = NULL`, a 64 kB input guard, **600 seconds** per request, **20 seconds** to connect, and **one request at a time** after observed HTTP 429 rejections with concurrency. Settings remain near the top of the runner and are recorded in `pilot-settings.json` and per-attempt metadata. Completion budgets can include reasoning. NULL omits the reasoning field and uses the provider default; support for explicit settings is model-dependent. A budget does not guarantee completion.
 
 Each run creates a new `review-<scan-id>` folder, with numbered suffixes for repeats. Existing results are preserved. **All selected rows receive fresh assessments**; completed results from earlier review folders are not automatically reused or merged. For targeted repeats, keep `scan_dir` pointing to the saved scans and select only the required `input_rows`. The resulting summary contains those selected rows. Use the separate merge script below to combine it with earlier completed assessments.
 
-The editable prompt is [docs/grouped-review-prompt.md](docs/grouped-review-prompt.md). It requests five separate assessments: variable/metadata, grid/spatial coverage, time coverage, variable values, and source/processing. Each has a result, concrete finding and next action. PASS means no actionable issue within the performed checks; FAIL identifies a demonstrated problem or unmet explicit requirement; REVIEW asks for a specific verification; NOT_CHECKED identifies unavailable essential checking. Missing required history remains a documentation FAIL confined to source/processing, rather than failing every category. Existing deterministic failures cannot be dismissed by a model PASS.
+The editable prompt is [docs/grouped-review-prompt.md](docs/grouped-review-prompt.md). It requests six separate assessments: variable/metadata, grid/spatial coverage, time coverage, variable values, source/processing, and mask provenance. Each has a result, concrete finding and next action. PASS means no actionable issue within the performed checks; FAIL identifies a demonstrated problem or unmet explicit requirement; REVIEW asks for a specific verification; NOT_CHECKED identifies unavailable essential checking. Missing required history is a documentation FAIL in source/processing and, for land files, mask provenance; it does not fail unrelated numerical categories. Existing deterministic failures cannot be dismissed by a model PASS.
+
+### Mask provenance
+
+The sixth category, `mask_provenance`, applies only to files labelled `land`. R extracts recorded mask references and application evidence, and enforces the agreed identity rule; the LLM receives the basename-only evidence and explains the result. This category can therefore have a deterministic result even when a model request fails or previews are generated without submission. Consult `pilot_index.csv` separately for LLM completion.
+
+| Result | Mask-provenance rule |
+| --- | --- |
+| PASS | History records application of approved `oceanmask_ithaca_global_025.nc`. A basename alone is sufficient; a missing directory is reported without failing. |
+| REVIEW | A mask is identified but unapproved (for example `mask_land_ocean_025.nc`), application is unclear, or the available history is incomplete. |
+| FAIL | Fully inspected land-file history identifies no mask file, including missing/empty history. This is a documentation failure, not proof of a wrong mask. |
+| NOT_CHECKED | The scan stopped earlier, relevant evidence is withheld or irrecoverably redacted/truncated, or the file is outside land-only scope. |
+
+PASS establishes the recorded mask identity, not mask contents or correct numerical application. Recognized application evidence includes CDO mul/ifthen-style commands using the mask as an input, or an explicit statement of use. A filename merely appearing as a reference or as a mask-creation output does not establish application. Other commands may require human verification and remain REVIEW; no history command is executed.
+
+New scans keep extracted mask paths as local-only attributes. Existing saved scans can recover the global history from their cached full `ncdump -h` output without reopening the source. If only redacted evidence remains, the checker reports that limitation instead of guessing a path or declaring provenance absent. Respect `include_history = FALSE`: withheld history is not recovered into the model payload.
+
+Per-file `mask-provenance.csv` records the mask filename, path exactly as visible, whether only the filename was available, application evidence and its source. The same recorded paths appear in the mask section of local `review.md`. The model receives mask basenames and application flags only, never recovered directories or raw headers. Inspect previews before submission; the original source files and cached scans are unchanged by grouped review.
+
+For a small server test, set `input_rows <- c(1, 5, 19)` and `max_concurrent_requests <- 1L` in `review_grouped_scans.R`, using the latest saved scan folder. Start with `send_to_api <- FALSE` to inspect extracted evidence and local paths, then set TRUE and run from the top to test the six-category LLM response. Keep the existing token/time budgets. No rescan is needed when the cache includes sufficient history. The local test suite uses synthetic data and mocked inference, not your server files.
 
 ### Concurrent LLM reviews and execution errors
 
@@ -105,19 +124,19 @@ Keys are read only when API calls are enabled, held in R memory and never intent
 
 The grouped review produces:
 
-- `summary.csv`: **`data_file_path,check_group,result,finding,next_action`**, five rows per selected file, with no overall verdict.
-- `summary_short.csv`: one row per `data_file_path`, followed by the five check-group columns preserving exactly the detailed summary's PASS, FAIL, REVIEW or NOT_CHECKED labels. Missing categories are NOT_CHECKED. Identical repeated results collapse; conflicting results for the same path/category require inspection instead of silently changing their meaning. Different full paths stay separate.
-- `summary_heatmap.png` and `summary_heatmap.pdf`: categorical overview with five columns, filenames in CSV row order, and exact status text in every coloured cell. PASS is green, FAIL red, REVIEW amber and NOT_CHECKED light grey. Each filename has a second line identifying its saved report, such as `review-abc123/file-014`, read from `pilot_index.csv`. Merged results point to the selected original review/report folder, not a newly numbered merge row. Data directories are not printed. If the mapping is absent, the label explicitly says `Report folder unavailable`; no report number is guessed. Full data/report paths and explanations remain in the CSVs.
+- `summary.csv`: **`data_file_path,check_group,result,finding,next_action`**, six rows per selected file in new reviews, with no overall verdict. Earlier five-category results retain their original scope.
+- `summary_short.csv`: one row per `data_file_path`, followed by the six check-group columns in new reviews (five in older reviews) preserving exactly the detailed summary's PASS, FAIL, REVIEW or NOT_CHECKED labels. Missing categories are NOT_CHECKED. Identical repeated results collapse; conflicting results for the same path/category require inspection instead of silently changing their meaning. Different full paths stay separate.
+- `summary_heatmap.png` and `summary_heatmap.pdf`: categorical overview with six category columns for new reviews (five for older reviews), filenames in CSV row order, and exact status text in every coloured cell. PASS is green, FAIL red, REVIEW amber and NOT_CHECKED light grey. Each filename has a second line identifying its saved report, such as `review-abc123/file-014`, read from `pilot_index.csv`. Merged results point to the selected original review/report folder, not a newly numbered merge row. Data directories are not printed. If the mapping is absent, the label explicitly says `Report folder unavailable`; no report number is guessed. Full data/report paths and explanations remain in the CSVs.
 - `flagged_files.csv`: the non-PASS category rows.
 - `pilot_index.csv`: API/preparation/schema completion status per selected file; a known deterministic failure can remain FAIL even if the LLM call failed. Preview-only rows are not completed model assessments.
-- Each file retains `group-results.csv`, a readable `review.md`, the submitted prompt, cached pilot checks and model response/usage metadata. A transport-complete response can still be INVALID_RESPONSE if its five-category JSON is invalid; use `pilot_index.csv` for assessment completion.
+- Each file retains `group-results.csv`, local `mask-provenance.csv`, a readable `review.md`, the submitted prompt, cached pilot checks and model response/usage metadata. A transport-complete response can still be INVALID_RESPONSE if its six-category JSON is invalid; use `pilot_index.csv` for assessment completion.
 - `data_overview.csv` is copied unchanged when present, retaining the numerical overview separately.
 
 For an already completed grouped review, run `run_experiments/summarise_grouped_review.R` with `review_dir` set to its folder. This regenerates `summary_short.csv` plus PNG/PDF heatmaps locally from the existing detailed summary, without scanning data or calling a model. Future grouped runs checkpoint the CSV after each file and render the heatmap once at normal batch completion, keeping plot rendering out of the API queue.
 
 `heatmap_rows_per_page` is configured at the top of the review runner and the regeneration script (default 50, allowed 1–100). Long summaries become a multipage PDF and numbered PNGs such as summary_heatmap_001.png. The PNGs use 300 dpi; the PDF retains vector text/shapes. Plots use built-in R grid/graphics, with no new packages. Regeneration replaces only the heatmap exports and removes their stale numbered PNG pages; CSV assessments are unchanged. A batch export error is reported without invalidating saved model/CSV results. After an interrupted run, the regeneration script can plot the rows already saved in summary.csv.
 
-The scan's `review_index.csv` and the grouped review's `pilot_index.csv` have different purposes. Set `scan_dir` to the scan folder and `review_dir` to the grouped review folder. Old single-verdict summaries do not have the five-group schema and cannot be passed to the grouped summary script.
+The scan's `review_index.csv` and the grouped review's `pilot_index.csv` have different purposes. Set `scan_dir` to the scan folder and `review_dir` to the grouped review folder. Old single-verdict summaries do not have the grouped schema and cannot be passed to the grouped summary script.
 
 ## 4. Merge full and partial reviews
 
@@ -140,7 +159,7 @@ Outputs go into a new, numbered-if-needed `merge-<id>` folder. Original reviews 
 - `summary.csv`, `summary_short.csv`, `flagged_files.csv` and PNG/PDF heatmaps in the existing grouped formats. `summarise_grouped_review.R` can regenerate this merged overview later.
 - `pilot_index.csv`: the selected execution status and original report references per file, with `selected_review_dir`, `selected_review_order` and `selection_reason`. Individual detailed reports stay in their original review folders.
 - `review_changes.csv`: category verdict changes between consecutive completed assessments in the supplied order, including old/new findings, next actions and originating review folders. PASS-to-NOT_CHECKED changes are recorded too. An empty file with column headers means no comparable verdicts changed. Failed API attempts are not treated as completed scientific assessments.
-- `review_sources.csv`: the ordered input folders and checksums of their summary/index CSVs; `merge-settings.json` and `run-lineage.json` record the merge settings and origin. No numerical scan statistics are recalculated or consolidated; existing `data_overview.csv` files remain in their original runs.
+- `review_sources.csv`: the ordered input folders and checksums of their summary/index CSVs; `merge-settings.json` and `run-lineage.json` record the merge settings and origin. Five-category inputs remain usable: an all-legacy merge stays five-category; a mixed merge marks the absent mask assessment NOT_CHECKED for files selected from legacy reviews. No favourable per-category mixing is performed. No numerical scan statistics are recalculated or consolidated; existing `data_overview.csv` files remain in their original runs.
 
 Keep original review folders available so report references remain usable. A merged folder can itself be an input to a later merge; its source-list files preserve the chain back to earlier reviews.
 

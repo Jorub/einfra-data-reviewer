@@ -2,6 +2,13 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-22 — Add separate land-mask provenance assessments
+
+- Add mask_provenance as a sixth category, applying the agreed approved-mask PASS, unidentified-mask REVIEW and missing-documentation FAIL rules only to land-labelled files. Use NOT_CHECKED for uninspected/withheld/irrecoverably redacted evidence and files outside scope. Distinguish recorded application from a filename reference; do not claim independent mask validation.
+- Extract reference paths locally from new scan history or cached raw ncdump history, preserving the original scans. Export per-file mask-provenance.csv and readable local references; send only mask basenames/application flags to the model. Enforce the identity rule deterministically while retaining separate model execution status.
+- Extend prompt, schema, summaries, plots and merges to six categories without fabricating mask verdicts for legacy five-category reviews. Use sequential requests by default after observed HTTP 429 errors; retain existing token/time budgets and the optional four-slot implementation.
+- Test approved/generic/missing histories, recorded mask application, private-path redaction, cached-header recovery, fresh NetCDF capture, source preservation, five/six-category compatibility and a three-file mocked review. Live server inference remains a user-run test.
+
 ## 2026-10-22 — Identify saved report folders on the heatmap
 
 - Label every file with its originating review/file report folder from pilot_index.csv, matching by full data path. Merged results retain the selected original report identifier; plotting never derives file numbers from row positions or displays data-directory paths.

@@ -61,5 +61,13 @@ stopifnot(grepl("Report folder unavailable", review_filename_labels(paths, missi
   all(grepl("Report folder unavailable", review_filename_labels(paths), fixed = TRUE)))
 duplicated_index <- rbind(index, index[1, ])
 stopifnot(inherits(try(review_heatmap_table(short, duplicated_index), silent = TRUE), "try-error"))
+# Regenerate a genuine old five-column heatmap using the same plotting code.
+legacy <- file.path(work, "legacy"); dir.create(legacy)
+legacy_short <- short[c("data_file_path", legacy_grouped_check_names())]
+write.csv(legacy_short, file.path(legacy, "summary_short.csv"), row.names = FALSE)
+write.csv(index, file.path(legacy, "pilot_index.csv"), row.names = FALSE)
+draw_review_heatmap <- real_draw
+legacy_exports <- write_review_heatmap(legacy, dpi = 72)
+stopifnot(all(file.exists(legacy_exports)), ncol(review_heatmap_table(legacy_short, index)) == 7)
 unlink(work, recursive = TRUE)
 cat("Heatmap passed: exact categorical results/order, saved report identifiers, path-based matching, missing-index labels, PNG/PDF exports, pagination, device cleanup, stale-page handling and unchanged source CSV. No data/model/credential access.\n")
