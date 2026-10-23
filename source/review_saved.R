@@ -34,11 +34,12 @@ review_saved_scans <- function(scan_dir, output_dir, model = "thinker", max_toke
     origin <- file.path(scan_dir, name)
     if (file.exists(origin)) file.copy(origin, file.path(run, name), overwrite = FALSE)
   }
-  jsonlite::write_json(list(model = model, max_tokens = max_tokens, reasoning_effort = reasoning_effort,
+  jsonlite::write_json(list(model = model, max_tokens = max_tokens, max_tokens_source = completion_budget_source(max_tokens),
+    reasoning_effort = reasoning_effort,
     max_input_bytes = max_input_bytes, send_to_api = send_to_api, selected_files = length(selected),
     source_scan_dir = scan_dir, time_utc = format(Sys.time(), tz = "UTC", usetz = TRUE)),
     file.path(run, "review-settings.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
-  message("Effective review settings: model=", model, "; max_tokens=", max_tokens,
+  message("Effective review settings: model=", model, "; max_tokens=", format_completion_budget(max_tokens),
     "; selected files=", length(selected), "; send_to_api=", send_to_api)
   checkpoint()
   for (i in selected) {

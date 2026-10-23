@@ -190,12 +190,12 @@ run_grouped_pilot <- function(scan_dir, output_dir, input_rows = NULL, model = "
     }
   }
   jsonlite::write_json(list(prompt_version = "grouped-review-v2-mask-provenance", model = model, max_tokens = max_tokens,
-    request_timeout = request_timeout, connection_timeout = connection_timeout,
+    max_tokens_source = completion_budget_source(max_tokens), request_timeout = request_timeout, connection_timeout = connection_timeout,
     max_concurrent_requests = max_concurrent_requests,
     heatmap_rows_per_page = heatmap_rows_per_page,
     reasoning_effort = reasoning_effort, input_rows = selected, send_to_api = send_to_api),
     file.path(run, "pilot-settings.json"), auto_unbox = TRUE, pretty = TRUE, null = "null")
-  message("Grouped pilot: model=", model, "; max_tokens=", max_tokens, "; files=", length(selected),
+  message("Grouped pilot: model=", model, "; max_tokens=", format_completion_budget(max_tokens), "; files=", length(selected),
     "; request_timeout=", request_timeout, "s; connection_timeout=", connection_timeout,
     "s; max_concurrent_requests=", max_concurrent_requests, "; send_to_api=", send_to_api)
   checkpoint()

@@ -6,7 +6,7 @@ source("source/llm.R")
 # Configuration ---------------------------------------------------------------
 output_dir <- "output"                     # private persistent directory; required to send
 model <- "thinker"                   # choose from list_models()
-max_tokens <- 8192L                   # includes reasoning where applicable
+max_tokens <- 8192L                   # NULL = provider default; numeric = explicit cap
 credentials_file <- path.expand("~/.config/einfra-data-reviewer/credentials.R")
 reasoning_effort <- NULL              # omit unverified model-specific controls
 max_input_bytes <- 24000L             # byte budget, not an exact token count

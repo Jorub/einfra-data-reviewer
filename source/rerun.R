@@ -8,6 +8,8 @@ read_attempt <- function(report_path) {
 }
 retry_budget <- function(meta, fallback) {
   x <- meta$max_tokens
+  if (is.null(x) && identical(meta$max_tokens_source, "provider_default"))
+    return(list(tokens = NULL, source = "provider default (max_tokens omitted)"))
   source <- "recorded"
   if (is.null(x) && identical(meta$finish_reason, "length")) {
     x <- meta$usage$completion_tokens; source <- "inferred from completion tokens at length limit"
@@ -51,7 +53,7 @@ rerun_llm_reviews <- function(batch_dir, output_dir, model = "thinker", reasonin
   record_attempt <- function(i, number, dir, meta, budget, budget_source) {
     metric <- function(x) if (is.numeric(x) && length(x) == 1) x else NA_real_
     attempts[[length(attempts) + 1L]] <<- data.frame(input_row = i, filename = index$filename[i],
-      attempt = number, requested_max_tokens = budget, budget_source = budget_source,
+      attempt = number, requested_max_tokens = metric(budget), budget_source = budget_source,
       model = if (is.null(meta$requested_model)) "unknown" else meta$requested_model,
       llm_status = if (is.null(meta$llm_status)) "unknown" else meta$llm_status,
       finish_reason = if (is.null(meta$finish_reason)) "unknown" else meta$finish_reason,
@@ -74,12 +76,12 @@ rerun_llm_reviews <- function(batch_dir, output_dir, model = "thinker", reasonin
       record_attempt(i, 0L, previous, meta, base$tokens, base$source)
       # For a token-limited attempt, double once, bounded by the configured cap.
       # An optional same-budget attempt precedes escalation only if requested.
-      budgets <- if (index$llm_status[i] == "TOKEN_LIMIT") {
+      budgets <- if (is.null(base$tokens)) list(NULL) else as.list(if (index$llm_status[i] == "TOKEN_LIMIT") {
         larger <- max(base$tokens, min(2 * base$tokens, max_retry_tokens))
         if (larger <= base$tokens && !same_budget_first)
           stop("Retry cap does not allow a larger budget; raise max_retry_tokens or request a same-budget retry.")
         unique(c(if (same_budget_first) base$tokens, larger))
-      } else base$tokens
+      } else base$tokens)
       for (j in seq_along(budgets)) {
         destination <- file.path(run, sprintf("file-%03d-attempt-%02d", i, j))
         dir.create(destination)
@@ -87,7 +89,7 @@ rerun_llm_reviews <- function(batch_dir, output_dir, model = "thinker", reasonin
         writeLines(as.character(preview), file.path(destination, "review-preview.json"))
         failure <- NULL
         report <- tryCatch(review_checks(checks, model = model, approved_payload = preview,
-          send = TRUE, report_dir = destination, max_tokens = budgets[j],
+          send = TRUE, report_dir = destination, max_tokens = budgets[[j]],
           reasoning_effort = reasoning_effort, max_input_bytes = max_input_bytes),
           error = function(e) { failure <<- conditionMessage(e); NULL })
         if (is.null(report)) {
@@ -97,7 +99,8 @@ rerun_llm_reviews <- function(batch_dir, output_dir, model = "thinker", reasonin
         }
         if (is.null(report)) stop(if (is.null(failure)) "No attempt report produced" else failure)
         meta <- read_attempt(report)
-        record_attempt(i, j, report, meta, budgets[j], "rerun setting")
+        record_attempt(i, j, report, meta, budgets[[j]],
+          if (is.null(budgets[[j]])) "provider default (max_tokens omitted)" else "rerun setting")
         row <- read.csv(file.path(report, "review_index.csv"), stringsAsFactors = FALSE)
         for (name in c("result", "reason", "llm_status", "report_path")) index[i, name] <- row[1, name]
         index$rerun_status[i] <- if (row$llm_status[1] == "COMPLETED") "COMPLETED" else "STILL_INCOMPLETE"

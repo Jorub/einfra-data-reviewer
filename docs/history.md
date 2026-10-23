@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-23 — Allow omission of the API token limit
+
+- Make max_tokens = NULL omit that parameter entirely from outgoing requests; retain numeric caps and existing numeric validation. Use omission in the configured grouped reviewer, keeping sequential requests, timeouts, input limits, reasoning settings and scientific checks unchanged. General-query and older function callers can opt in without changing their numeric defaults.
+- Record provider_default versus explicit limit selection in settings/attempt metadata, with JSON null retained only in local metadata. Preserve returned usage and finish reasons without claiming a known or unlimited provider budget. Length-limited responses remain incomplete. The retained legacy retry helper preserves explicit omission rather than inferring/reinstating a numeric cap.
+- Verify request JSON, synchronous and asynchronous calls, saved-scan grouped review, failure metadata and legacy retry accounting using mocks/local response files. No credentials or live inference are required.
+
 ## 2026-10-22 — Add separate land-mask provenance assessments
 
 - Add mask_provenance as a sixth category, applying the agreed approved-mask PASS, unidentified-mask REVIEW and missing-documentation FAIL rules only to land-labelled files. Use NOT_CHECKED for uninspected/withheld/irrecoverably redacted evidence and files outside scope. Distinguish recorded application from a filename reference; do not claim independent mask validation.

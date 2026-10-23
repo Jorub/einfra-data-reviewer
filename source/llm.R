@@ -33,8 +33,9 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   if(!isTRUE(send)||!identical(as.character(approved_prompt),as.character(prompt)))
     stop("Inspect the exact prompt and explicitly approve it with send = TRUE.")
   if(!is.character(model)||length(model)!=1||is.na(model)||!nzchar(model)) stop("Select a model.")
-  if(!is.numeric(max_tokens)||length(max_tokens)!=1||!is.finite(max_tokens)||max_tokens<1||max_tokens!=floor(max_tokens))
-    stop("max_tokens must be a positive integer supported by the chosen model.")
+  if (!is.null(max_tokens) && (!is.numeric(max_tokens) || length(max_tokens) != 1 ||
+      !is.finite(max_tokens) || max_tokens < 1 || max_tokens != floor(max_tokens)))
+    stop("max_tokens must be NULL or a positive integer supported by the chosen model.")
   if(!is.null(reasoning_effort) && (length(reasoning_effort)!=1||is.na(reasoning_effort)||
     !reasoning_effort %in% c("low","medium","high"))) stop("reasoning_effort must be NULL, low, medium or high; support is model-specific.")
   if(length(max_input_bytes)!=1||!is.finite(max_input_bytes)||max_input_bytes<1||
@@ -47,7 +48,8 @@ ask_llm <- function(prompt, model, output_dir, approved_prompt, send = FALSE,
   started <- proc.time()[["elapsed"]]
   meta <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
     request_timeout = request_timeout, connection_timeout = connection_timeout,
-    max_tokens = max_tokens,input_bytes = nchar(prompt,type = "bytes"),usage = NULL,
+    max_tokens = max_tokens, max_tokens_source = completion_budget_source(max_tokens),
+    input_bytes = nchar(prompt,type = "bytes"),usage = NULL,
     finish_reason = NULL,status = "NOT_COMPLETED",complete = FALSE,
     started_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
   save_meta <- function(metadata = meta) jsonlite::write_json(metadata,file.path(run,"metadata.json"),

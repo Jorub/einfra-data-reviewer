@@ -11,7 +11,7 @@ scan_dir <- ""                          # saved scan folder for all Ithaca paper
 output_dir <- "output"
 input_rows <- NULL                      # NULL = every row; test a few files with c(1, 5, 19)
 model <- "thinker"
-max_tokens <- 20000L
+max_tokens <- NULL                     # omit API cap; a numeric value sets an explicit limit
 reasoning_effort <- NULL
 max_input_bytes <- 64000L
 request_timeout <- 600                  # maximum seconds for each complete API request

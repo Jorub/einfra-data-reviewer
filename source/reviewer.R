@@ -29,8 +29,8 @@ http_error_summary <- function(status, body) {
          "; raw response body suppressed.")
 }
 review_request <- function(model, payload, max_tokens, reasoning_effort = NULL) {
-  request <- list(model = model,messages = list(list(role = "user",content = payload)),
-                  max_tokens = max_tokens,stream = FALSE)
+  request <- list(model = model, messages = list(list(role = "user", content = payload)), stream = FALSE)
+  if (!is.null(max_tokens)) request$max_tokens <- max_tokens
   if(!is.null(reasoning_effort)) request$reasoning_effort <- reasoning_effort
   request
 }
@@ -193,10 +193,15 @@ review_summary <- function(checks, llm_status, parsed = NULL) {
   }
   data.frame(filename = f,result = status,reason = paste(reasons,collapse = "; "),stringsAsFactors = FALSE)
 }
+completion_budget_source <- function(max_tokens) if (is.null(max_tokens)) "provider_default" else "explicit"
+format_completion_budget <- function(max_tokens) {
+  if (is.null(max_tokens)) "provider default (max_tokens omitted)" else as.character(max_tokens)
+}
 validate_completion_budget <- function(max_tokens) {
+  if (is.null(max_tokens)) return(invisible(NULL))
   if (!is.numeric(max_tokens) || length(max_tokens) != 1 || !is.finite(max_tokens) ||
       max_tokens != floor(max_tokens) || max_tokens < 256 || max_tokens > 65536)
-    stop("Completion budget must be an integer between 256 and 65536, supported by the selected model.")
+    stop("Completion budget must be NULL or an integer between 256 and 65536, supported by the selected model.")
   invisible(NULL)
 }
 review_checks <- function(checks, model, approved_payload, send = FALSE,
@@ -227,7 +232,7 @@ review_checks <- function(checks, model, approved_payload, send = FALSE,
   # Create a conservative checkpoint before contacting the API.
   write.csv(review_summary(checks,"NOT_COMPLETED"),file.path(run,"summary.csv"),row.names = FALSE)
   metadata <- list(requested_model = model,returned_model = NULL,reasoning_effort = reasoning_effort,
-    input_bytes = input_bytes,max_input_bytes = max_input_bytes,max_tokens = max_tokens,finish_reason = NULL,usage = NULL,
+    input_bytes = input_bytes,max_input_bytes = max_input_bytes,max_tokens = max_tokens, max_tokens_source = completion_budget_source(max_tokens), finish_reason = NULL,usage = NULL,
     complete = FALSE,llm_status = "NOT_COMPLETED",deterministic_failures = sum(checks$status=="FAIL"),
     deterministic_warnings = sum(checks$status=="WARN"),prompt_version = "scientific-triage-v7-mask-convention",
     time_utc = format(Sys.time(),tz = "UTC",usetz = TRUE))
