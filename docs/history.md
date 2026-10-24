@@ -2,6 +2,12 @@
 
 Meaningful milestones, reconstructed from Git commits where applicable. Git history holds detailed changes; README.md describes current usage.
 
+## 2026-10-24 — Continue independent checks after naming/variable failures
+
+- Remove early filename/variable-selection exits. Readable coordinate, time and history checks continue; numerical scans still require an unambiguous variable and supported dimensions. Keep mismatches visible in their own group without failing unrelated categories.
+- Retain identifiable filename fields without repairing malformed dates or guessing missing units/coverage. Inspect internal observed time gaps when filename endpoints are invalid, while leaving declared boundary coverage unresolved. Preserve land-only mask scope and record unknown scope explicitly.
+- Add synthetic regression coverage for the FLDAS date and albedo field-count cases, internal missing years, wrong names/units, ambiguous variables and unsupported axes, plus cached-only grouped review and unchanged source files. Older abbreviated caches require fresh scans; existing reports remain intact.
+
 ## 2026-10-23 — Allow omission of the API token limit
 
 - Make max_tokens = NULL omit that parameter entirely from outgoing requests; retain numeric caps and existing numeric validation. Use omission in the configured grouped reviewer, keeping sequential requests, timeouts, input limits, reasoning settings and scientific checks unchanged. General-query and older function callers can opt in without changing their numeric defaults.

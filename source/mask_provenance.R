@@ -77,6 +77,10 @@ assess_mask_provenance <- function(observation) {
   result <- function(status, finding, action) list(status = status, finding = finding, next_action = action)
   if (!isTRUE(observation$inspected)) return(result("NOT_CHECKED", "The scan stopped before mask provenance could be inspected.",
     "Resolve the earlier scan/filename issue before assessing mask provenance."))
+  if (is.null(observation$scope) || !length(observation$scope) || is.na(observation$scope) ||
+      observation$scope %in% c("", "unknown")) return(result("NOT_CHECKED",
+    "Filename land/global scope is unavailable; mask references were inspected but the land-only requirement cannot be assigned.",
+    "Confirm the missing coverage label; recorded mask references remain in the local report."))
   if (!identical(observation$scope, "land")) return(result("NOT_CHECKED",
     "The land-mask provenance requirement applies to land-labelled files; this file is outside that scope.",
     "No land-mask provenance assessment is made for this scope."))

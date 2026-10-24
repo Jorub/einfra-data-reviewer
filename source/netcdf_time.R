@@ -10,7 +10,10 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
   ordered <- length(values) > 0 && all(is.finite(values)) && all(diff(values) > 0)
   add("time_numeric_order", ordered, "Finite, unique and increasing native time coordinates")
   finish <- function() list(checks = do.call(rbind, rows), evidence = evidence, period_details = period_details, layer_timestamps = layer_timestamps)
-  if (!all(is.finite(values)) || !length(values)) return(finish())
+  if (!all(is.finite(values)) || !length(values)) {
+    add("time_coverage", "NOT_CHECKED", "Nonfinite or empty time coordinates prevent calendar coverage checks")
+    return(finish())
+  }
   if (!requireNamespace("CFtime", quietly = TRUE)) {
     add("time_coverage", "NOT_CHECKED", "CFtime unavailable; run setup.R")
     return(finish())
@@ -33,30 +36,48 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
     evidence$bounds_used <- !is.null(bounds)
     f <- filename$fields
     frequency <- f$frequency
-    first <- paste0(substr(f$start, 1, 4), "-", substr(f$start, 5, 6), "-01")
+    if (is.null(frequency) || !frequency %in% c("monthly", "daily", "hourly", "yearly", "annual")) {
+      add("time_coverage", "NOT_CHECKED", "Time coordinates decoded, but filename frequency is unavailable/unsupported; no frequency inferred")
+      return(finish())
+    }
+    actual <- switch(frequency, monthly = substr(dates, 1, 7), daily = dates,
+      hourly = substr(stamps, 1, 13), yearly = substr(dates, 1, 4), annual = substr(dates, 1, 4))
+    declared_range <- valid_filename_month(f$start) && valid_filename_month(f$end) && f$start <= f$end
+    # With invalid endpoints, inspect gaps only between the actual first/last periods.
+    # This never repairs the filename or establishes its intended boundary coverage.
+    range_start <- if (declared_range) f$start else gsub("-", "", min(substr(dates, 1, 7)), fixed = TRUE)
+    range_end <- if (declared_range) f$end else gsub("-", "", max(substr(dates, 1, 7)), fixed = TRUE)
+    first <- paste0(substr(range_start, 1, 4), "-", substr(range_start, 5, 6), "-01")
     # Generate calendar-valid days, then retain exactly the named month interval.
-    n_years <- as.integer(substr(f$end, 1, 4)) - as.integer(substr(f$start, 1, 4)) + 1
+    n_years <- as.integer(substr(range_end, 1, 4)) - as.integer(substr(range_start, 1, 4)) + 1
     days <- CFtime::as_timestamp(CFtime::CFtime(paste("days since", first), calendar,
       seq.int(0, n_years * 366 + 31)), format = "date")
     month_code <- gsub("-", "", substr(days, 1, 7), fixed = TRUE)
-    days <- days[month_code >= f$start & month_code <= f$end]
+    days <- days[month_code >= range_start & month_code <= range_end]
     expected <- switch(frequency,
       monthly = unique(substr(days, 1, 7)),
       daily = days,
       hourly = as.vector(t(outer(days, sprintf("%02d", 0:23), paste, sep = "T"))),
       yearly = unique(substr(days, 1, 4)), annual = unique(substr(days, 1, 4)))
-    actual <- switch(frequency, monthly = substr(dates, 1, 7), daily = dates,
-      hourly = substr(stamps, 1, 13), yearly = substr(dates, 1, 4), annual = substr(dates, 1, 4))
+    if (!declared_range) expected <- expected[expected >= min(actual) & expected <= max(actual)]
     missing <- setdiff(expected, actual); unexpected <- setdiff(actual, expected)
     duplicates <- unique(actual[duplicated(actual)])
     period_details <- data.frame(kind = c(rep("missing", length(missing)), rep("unexpected", length(unexpected)),
       rep("duplicate", length(duplicates))), period = c(missing, unexpected, duplicates), stringsAsFactors = FALSE)
     duplicated <- sum(duplicated(actual))
-    add("time_record_count", length(actual) == length(expected),
-      paste("Expected", length(expected), frequency, "records; observed", length(actual)))
-    add("time_coverage", identical(unname(actual), unname(expected)),
-      sprintf("%d missing periods; %d unexpected periods; %d duplicate periods within filename coverage",
-        length(missing), length(unexpected), duplicated))
+    if (declared_range) {
+      add("time_record_count", length(actual) == length(expected),
+        paste("Expected", length(expected), frequency, "records; observed", length(actual)))
+      add("time_coverage", identical(unname(actual), unname(expected)),
+        sprintf("%d missing periods; %d unexpected periods; %d duplicate periods within filename coverage",
+          length(missing), length(unexpected), duplicated))
+    } else {
+      add("time_coverage", "NOT_CHECKED", "Filename start/end dates are invalid or unavailable; declared boundary coverage cannot be established")
+      add("time_internal_coverage", identical(unname(actual), unname(expected)),
+        sprintf("Between observed first/last %s periods only: %d missing; %d duplicate; %d records observed, %d expected; filename endpoints not verified",
+          frequency, length(missing), duplicated, length(actual), length(expected)))
+    }
+    evidence$coverage_basis <- if (declared_range) "Filename interval" else "Observed first-to-last periods only; filename boundaries unresolved"
     evidence$frequency <- frequency
     evidence$missing_periods <- head(missing, 24)
     evidence$unexpected_periods <- head(unexpected, 24)
@@ -64,8 +85,8 @@ netcdf_time_checks <- function(values, units, calendar, filename, bounds = NULL)
     evidence$missing_period_count <- length(missing)
     evidence$period_details_truncated <- length(missing) > 24 || length(unexpected) > 24
     if (frequency %in% c("yearly", "annual")) {
-      complete_endpoints <- substr(f$start, 5, 6) == "01" && substr(f$end, 5, 6) == "12"
-      add("annual_filename_completeness", complete_endpoints,
+      complete_endpoints <- declared_range && substr(f$start, 5, 6) == "01" && substr(f$end, 5, 6) == "12"
+      add("annual_filename_completeness", if (declared_range) complete_endpoints else "NOT_CHECKED",
         "Annual products must declare full-year endpoints (January through December); partial endpoints require review")
       if (!is.null(bounds)) {
         lo <- CFtime::as_timestamp(CFtime::CFtime(units, calendar, bounds[1, ]), format = "timestamp")

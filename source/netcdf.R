@@ -2,20 +2,42 @@ source("source/netcdf_families.R")
 source("source/netcdf_time.R")
 source("source/mask_provenance.R")
 
-# Filename claims are the expected contract. Do not silently repair malformed names.
+# Filename claims remain explicit failures; recover only independently identifiable fields.
+valid_filename_month <- function(x) {
+  is.character(x) && length(x) == 1 && !is.na(x) && grepl("^[0-9]{6}$", x) &&
+    substr(x, 5, 6) %in% sprintf("%02d", 1:12) && substr(x, 1, 4) != "0000"
+}
 parse_netcdf_filename <- function(path) {
   name <- basename(path)
-  fields <- strsplit(sub("\\.(nc|nc4|cdf)$", "", name, ignore.case = TRUE), "_", fixed = TRUE)[[1]]
-  if (length(fields) != 8 || any(!nzchar(fields)))
-    return(list(basename = name, valid = FALSE, issues = "Expected eight nonempty underscore-separated fields"))
-  names(fields) <- c("source", "variable", "units", "spatial_coverage", "start", "end", "spatial_resolution", "frequency")
+  tokens <- strsplit(sub("\\.(nc|nc4|cdf)$", "", name, ignore.case = TRUE), "_", fixed = TRUE)[[1]]
+  keys <- c("source", "variable", "units", "spatial_coverage", "start", "end", "spatial_resolution", "frequency")
+  fields <- setNames(rep("", length(keys)), keys)
   issues <- character()
-  date_ok <- function(x) grepl("^[0-9]{6}$", x) && substr(x, 5, 6) %in% sprintf("%02d", 1:12) && substr(x, 1, 4) != "0000"
-  if (!date_ok(fields['start'])) issues <- c(issues, "Malformed start date; expected YYYYMM")
-  if (!date_ok(fields['end'])) issues <- c(issues, "Malformed end date; expected YYYYMM")
-  if (!length(issues) && fields['start'] > fields['end']) issues <- c(issues, "Start date is later than end date")
-  if (!fields['frequency'] %in% c("hourly", "daily", "monthly", "yearly", "annual")) issues <- c(issues, "Unrecognized temporal frequency")
-  list(basename = name, valid = !length(issues), fields = as.list(fields), issues = issues)
+  mapping <- "Eight positional fields"
+  if (length(tokens) == 8) {
+    fields[] <- tokens
+    if (any(!nzchar(tokens))) issues <- "Expected eight nonempty underscore-separated fields"
+  } else {
+    issues <- "Expected eight nonempty underscore-separated fields"
+    mapping <- "Unavailable; missing fields are not guessed"
+    # A recognisable four-field suffix can survive omitted unit/coverage fields.
+    # Keep those ambiguous middle claims unknown instead of shifting positions.
+    if (length(tokens) >= 6 && length(tokens) <= 7 &&
+        all(grepl("^[0-9]{6,8}$", tokens[length(tokens) - c(3, 2)])) &&
+        grepl("^[0-9]{3}$", tokens[length(tokens) - 1]) &&
+        tail(tokens, 1) %in% c("hourly", "daily", "monthly", "yearly", "annual")) {
+      fields[c("source", "variable")] <- tokens[1:2]
+      fields[c("start", "end", "spatial_resolution", "frequency")] <- tail(tokens, 4)
+      mapping <- "Partial leading identity and right-anchored temporal/grid suffix; units and spatial coverage unknown"
+    }
+  }
+  if (!valid_filename_month(fields['start'])) issues <- c(issues, "Malformed or unavailable start date; expected YYYYMM")
+  if (!valid_filename_month(fields['end'])) issues <- c(issues, "Malformed or unavailable end date; expected YYYYMM")
+  if (valid_filename_month(fields['start']) && valid_filename_month(fields['end']) && fields['start'] > fields['end'])
+    issues <- c(issues, "Start date is later than end date")
+  if (!fields['frequency'] %in% c("hourly", "daily", "monthly", "yearly", "annual"))
+    issues <- c(issues, "Unrecognized or unavailable temporal frequency")
+  list(basename = name, valid = !length(issues), fields = as.list(fields), field_mapping = mapping, issues = issues)
 }
 canonical_units <- function(x) {
   z <- tolower(gsub("[ _°]", "", x))
@@ -78,7 +100,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   add <- function(check, status, detail) rows[[length(rows) + 1L]] <<- data.frame(
     check = check, status = if (is.logical(status)) if (isTRUE(status)) "PASS" else "FAIL" else status,
     detail = detail, stringsAsFactors = FALSE)
-  evidence <- list(checker_version = "filename-family-v7-local-mask-evidence", filename = filename, policy = list(
+  evidence <- list(checker_version = "filename-family-v8-independent-checks", filename = filename, policy = list(
     expectations = "Parsed from filename, checked against contents; no cross-frequency product comparisons",
     provenance = "Missing/empty history attribute is a mandatory provenance FAIL, even with other metadata or notes. Unclear source/temporal meaning also fails; native-frequency sources need not have a local aggregation step",
     project_stage_meaning = "raw is already preprocessed/harmonised to common units and 0.25-degree grid, not untouched downloads; processed usually contains spatial/time subsets",
@@ -95,7 +117,6 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     x
   }
   add("filename_format", filename$valid, if (filename$valid) "Eight fields and valid YYYYMM endpoints" else paste(filename$issues, collapse = "; "))
-  if (!filename$valid) return(finish())
   f <- filename$fields
   profile <- netcdf_family(path, f$variable, family)
   evidence$family <- profile
@@ -105,7 +126,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   resolution <- 0.25
   resolution_ok <- TRUE
   evidence$contract <- c(f, list(resolution_degrees = resolution))
-  add("resolution_code", identical(f$spatial_resolution, "025"),
+  add("resolution_code", if (!nzchar(f$spatial_resolution)) "NOT_CHECKED" else identical(f$spatial_resolution, "025"),
     "All project grids are 0.25 degrees; filename must use the established 025 code")
   n <- tryCatch(ncdf4::nc_open(path), error = function(e) stop("Cannot open NetCDF input."))
   on.exit(ncdf4::nc_close(n))
@@ -143,41 +164,48 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
   dims <- c(lon = find_dim("lon"), lat = find_dim("lat"), time = find_dim("time"))
   add("coordinate_dimensions", if (!anyNA(dims)) "PASS" else "NOT_CHECKED",
       "Requires regular one-dimensional longitude/latitude/time dimensions; unsupported grids need review")
-  if (anyNA(dims)) return(finish())
-  candidates <- names(n$var)[vapply(n$var, function(v) all(dims %in% vapply(v$dim, function(d) d$name, character(1))), logical(1))]
+  candidates <- if (anyNA(dims)) character() else names(n$var)[vapply(n$var, function(v) all(dims %in% vapply(v$dim, function(d) d$name, character(1))), logical(1))]
   if (is.null(variable)) {
     if (f$variable %in% candidates) variable <- f$variable else if (length(candidates) == 1) variable <- candidates[1]
   }
   found <- length(variable) == 1 && variable %in% candidates
   add("data_variable", if (found) "PASS" else "NOT_CHECKED", paste("Data-variable candidates:", paste(candidates, collapse = ", ")))
-  if (!found) return(finish())
-  remaining <- setdiff(candidates, variable)
-  if (length(remaining)) add("additional_data_variables", "NOT_CHECKED",
-    paste("Other data variables not scanned in this filename-variable review:", paste(remaining, collapse = ", ")))
-  add("filename_variable", if (identical(variable, f$variable)) "PASS" else "WARN",
-    if (identical(variable, "mask") && f$variable != "mask")
-      paste("NAMING/METADATA: masking left variable named mask instead of", f$variable,
-        "; restore intended name and verify units; name alone does not imply binary values") else
-      paste("Filename claims", f$variable, "; selected variable", variable, "; differing aliases require confirmation"))
-  v <- n$var[[variable]]
-  dn <- vapply(v$dim, function(d) d$name, character(1)); dl <- vapply(v$dim, function(d) d$len, numeric(1))
-  extra_ok <- all(dl[!dn %in% dims] == 1)
-  add("extra_dimensions", if (extra_ok) "PASS" else "NOT_CHECKED", "Nonsingleton extra dimensions require explicit layer/member handling")
-  units <- as.character(att(variable, "units", ""))
-  add("filename_units", identical(canonical_units(f$units), canonical_units(units)), paste("Filename:", f$units, "; stored:", units))
-  cell_methods <- as.character(att(variable, "cell_methods", ""))
-  evidence$observed <- list(variable = variable, units = units, storage_type = v$prec, dimensions = as.list(setNames(dl, dn)),
-    long_name = sanitize_history(att(variable, "long_name", ""), 500L)$text,
-    standard_name = sanitize_history(att(variable, "standard_name", ""), 500L)$text,
-    scale_factor = att(variable, "scale_factor", 1), add_offset = att(variable, "add_offset", 0),
-    fill_value = att(variable, "_FillValue"), missing_value = att(variable, "missing_value"),
-    cell_methods = sanitize_history(cell_methods, 1000L)$text)
+  evidence$observed <- list(data_variable_candidates = as.list(candidates))
+  extra_ok <- FALSE
+  if (found) {
+    remaining <- setdiff(candidates, variable)
+    if (length(remaining)) add("additional_data_variables", "NOT_CHECKED",
+      paste("Other data variables not scanned in this filename-variable review:", paste(remaining, collapse = ", ")))
+    add("filename_variable", if (!nzchar(f$variable)) "NOT_CHECKED" else if (identical(variable, f$variable)) "PASS" else "WARN",
+      if (identical(variable, "mask") && f$variable != "mask")
+        paste("NAMING/METADATA: masking left variable named mask instead of", f$variable,
+          "; restore intended name and verify units; name alone does not imply binary values") else
+        if (!nzchar(f$variable)) paste("Filename variable unavailable; selected sole/explicit data variable", variable) else
+          paste("Filename claims", f$variable, "; selected variable", variable, "; differing aliases require confirmation"))
+    v <- n$var[[variable]]
+    dn <- vapply(v$dim, function(d) d$name, character(1)); dl <- vapply(v$dim, function(d) d$len, numeric(1))
+    extra_ok <- all(dl[!dn %in% dims] == 1)
+    add("extra_dimensions", if (extra_ok) "PASS" else "NOT_CHECKED", "Nonsingleton extra dimensions require explicit layer/member handling")
+    units <- as.character(att(variable, "units", ""))
+    add("filename_units", if (!nzchar(f$units)) "NOT_CHECKED" else identical(canonical_units(f$units), canonical_units(units)),
+      paste("Filename units:", if (nzchar(f$units)) f$units else "unavailable; no expected unit inferred", "; stored:", units))
+    cell_methods <- as.character(att(variable, "cell_methods", ""))
+    evidence$observed <- list(variable = variable, units = units, storage_type = v$prec, dimensions = as.list(setNames(dl, dn)),
+      long_name = sanitize_history(att(variable, "long_name", ""), 500L)$text,
+      standard_name = sanitize_history(att(variable, "standard_name", ""), 500L)$text,
+      scale_factor = att(variable, "scale_factor", 1), add_offset = att(variable, "add_offset", 0),
+      fill_value = att(variable, "_FillValue"), missing_value = att(variable, "missing_value"),
+      cell_methods = sanitize_history(cell_methods, 1000L)$text)
+  } else {
+    add("filename_variable", "NOT_CHECKED", "No unambiguous data variable selected; naming comparisons and values require explicit selection")
+    add("filename_units", "NOT_CHECKED", "No unambiguous data variable selected; units comparison unavailable")
+  }
   has_provenance <- nzchar(provenance_notes) || (length(history) && any(nzchar(history))) ||
     any(vapply(provenance, function(x) nzchar(x), logical(1)))
   add("provenance_evidence", if (has_provenance) "NOT_CHECKED" else "FAIL",
     if (has_provenance) "Evidence supplied; LLM must assess source traceability and aggregation semantics, not just presence" else
       "No source/processing provenance supplied; filename alone cannot establish traceability")
-  if (profile$family == "temperature" && tolower(f$variable) %in% c("tmin", "tmax", "tasmin", "tasmax") && f$frequency %in% c("monthly", "yearly", "annual")) {
+  if (found && profile$family == "temperature" && tolower(f$variable) %in% c("tmin", "tmax", "tasmin", "tasmax") && f$frequency %in% c("monthly", "yearly", "annual")) {
     aggregation_text <- paste(cell_methods, history, provenance_notes, unlist(provenance), collapse = " ")
     evidence$family$requirements <- c(profile$requirements,
       "Missing or ambiguous Tmin/Tmax aggregation is a provenance FAIL even if time coverage is complete. Identify mean daily extrema versus period extrema.")
@@ -185,6 +213,10 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       "Aggregation undocumented: cannot distinguish mean daily extrema from period extrema")
   }
   for (axis in c("lon", "lat")) {
+    if (is.na(dims[[axis]])) {
+      add(paste0(axis, "_coordinates"), "NOT_CHECKED", "No uniquely identifiable coordinate dimension for this axis")
+      next
+    }
     d <- n$dim[[dims[[axis]]]]; x <- d$vals
     finite <- length(x) > 1 && all(is.finite(x))
     monotone <- finite && (all(diff(x) > 0) || all(diff(x) < 0))
@@ -210,22 +242,29 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       }
     }
   }
-  td <- n$dim[[dims[["time"]]]]; t <- td$vals
-  calendar <- tolower(att(td$name, "calendar", "standard"))
-  bounds <- NULL; bounds_name <- att(td$name, "bounds")
-  if (!is.null(bounds_name) && bounds_name %in% names(n$var)) {
-    bv <- n$var[[bounds_name]]; sizes <- vapply(bv$dim, function(d) d$len, numeric(1))
-    bn <- vapply(bv$dim, function(d) d$name, character(1))
-    if (length(sizes) == 2 && dims[["time"]] %in% bn && sizes[which(bn != dims[["time"]])][1] == 2) {
-      bounds <- ncdf4::ncvar_get(n, bounds_name, collapse_degen = FALSE)
-      if (match(dims[["time"]], bn) == 1) bounds <- base::t(bounds)
-    } else add("time_bounds", "NOT_CHECKED", "Time bounds have unsupported dimensions")
+  t <- numeric()
+  time_result <- list(evidence = list(), layer_timestamps = character(),
+    period_details = data.frame(kind = character(), period = character()))
+  if (is.na(dims[["time"]])) {
+    add("time_coverage", "NOT_CHECKED", "No uniquely identifiable time dimension; spatial and history checks continue")
+  } else {
+    td <- n$dim[[dims[["time"]]]]; t <- td$vals
+    calendar <- tolower(att(td$name, "calendar", "standard"))
+    bounds <- NULL; bounds_name <- att(td$name, "bounds")
+    if (!is.null(bounds_name) && bounds_name %in% names(n$var)) {
+      bv <- n$var[[bounds_name]]; sizes <- vapply(bv$dim, function(d) d$len, numeric(1))
+      bn <- vapply(bv$dim, function(d) d$name, character(1))
+      if (length(sizes) == 2 && dims[["time"]] %in% bn && sizes[which(bn != dims[["time"]])][1] == 2) {
+        bounds <- ncdf4::ncvar_get(n, bounds_name, collapse_degen = FALSE)
+        if (match(dims[["time"]], bn) == 1) bounds <- base::t(bounds)
+      } else add("time_bounds", "NOT_CHECKED", "Time bounds have unsupported dimensions")
+    }
+    time_result <- netcdf_time_checks(t, td$units, calendar, filename, bounds)
+    rows[[length(rows) + 1L]] <- time_result$checks
+    evidence$observed$time <- time_result$evidence
   }
-  time_result <- netcdf_time_checks(t, td$units, calendar, filename, bounds)
-  rows[[length(rows) + 1L]] <- time_result$checks
-  evidence$observed$time <- time_result$evidence
   add("land_mask", "NOT_CHECKED", "No independent land mask supplied; do not infer mask correctness from missing fraction")
-  if (scan_values && extra_ok) {
+  if (scan_values && found && extra_ok) {
     ti <- match(dims[["time"]], dn); nt <- dl[ti]; stats <- vector("list", nt)
     message("Scanning ", nt, " time slices read-only: ", basename(path))
     for (i in seq_len(nt)) {
@@ -245,6 +284,8 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       missing_fraction_min = min(stats$missing / stats$total), missing_fraction_max = max(stats$missing / stats$total),
       representative_slices = stats[unique(round(seq(1, nt, length.out = min(8, nt)))), ])
     fraction <- stats$missing / stats$total
+    if (!nzchar(f$spatial_coverage)) add("spatial_coverage_claim", "NOT_CHECKED",
+      "Filename coverage label unavailable; observed coordinates and missing fractions were inspected without assuming land/global scope")
     if (f$spatial_coverage == "global")
       add("global_data_coverage", all(stats$finite == stats$total),
         paste("Global means land plus ocean within represented domain: missing fraction ranges", signif(min(fraction), 4), "to", signif(max(fraction), 4)))
@@ -262,7 +303,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
       evidence$value_scan$global_min <- min(stats$min, na.rm = TRUE)
       evidence$value_scan$global_max <- max(stats$max, na.rm = TRUE)
     }
-  } else add("value_scan", "NOT_CHECKED", "Values not scanned; extra dimensions or disabled scan require follow-up")
+  } else add("value_scan", "NOT_CHECKED", "Values not scanned; ambiguous/missing variable, unsupported dimensions or disabled scan require follow-up")
   tool_results <- list()
   if (use_system_tools) {
     run_tool <- function(executable, args) {
@@ -280,7 +321,7 @@ check_netcdf <- function(path, variable = NULL, family = NULL, provenance_notes 
     add("ncdump_header", tool_results$ncdump_header$status, "Full header stays local; selected metadata/history enter preview")
     tool_results$cdo <- run_tool("cdo", c("-s", "ntime", shQuote(path)))
     ct <- suppressWarnings(as.numeric(trimws(tool_results$cdo$output)))
-    if (tool_results$cdo$status == "PASS" && length(ct) == 1 && is.finite(ct))
+    if (length(t) && tool_results$cdo$status == "PASS" && length(ct) == 1 && is.finite(ct))
       add("cdo_time_count", ct == length(t), paste("CDO:", ct, "; R:", length(t)))
     else add("cdo_time_count", "NOT_CHECKED", "CDO unavailable or count query failed")
   } else add("system_tools", "NOT_CHECKED", "External queries disabled")

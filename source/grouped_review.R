@@ -81,7 +81,7 @@ check_group <- function(name) {
   if (name == "mask_provenance") return("mask_provenance")
   if (name %in% c("filename_format", "data_variable", "filename_variable", "filename_units",
       "additional_data_variables", "extra_dimensions")) return("variable_and_metadata")
-  if (name %in% c("coordinate_dimensions", "resolution_code", "land_mask", "land_data_coverage", "global_data_coverage") ||
+  if (name %in% c("coordinate_dimensions", "resolution_code", "land_mask", "land_data_coverage", "global_data_coverage", "spatial_coverage_claim") ||
       grepl("^(lon|lat)_", name)) return("grid_and_spatial_coverage")
   if (grepl("^(time_|annual_)", name) || name == "cdo_time_count") return("time_coverage")
   if (name %in% c("nonfinite_values", "nonempty_time_slices", "value_scan")) return("variable_values")
